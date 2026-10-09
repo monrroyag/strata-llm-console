@@ -2,6 +2,10 @@
 
 All notable changes to Strata LLM Console are documented here.
 
+## 0.3.5 — 2026-10-09
+
+- Make all published checksum files portable by recording asset basenames instead of build-runner absolute paths.
+
 ## 0.3.4 — 2026-10-09
 
 - Add a Debian-safe systemd model template and a narrow sudo-authorized helper instead of unprivileged writes to `/etc/systemd/system`.

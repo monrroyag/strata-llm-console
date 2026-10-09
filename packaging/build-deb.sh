@@ -183,5 +183,5 @@ EOF
 chmod 0755 "$DEBIAN/postinst" "$DEBIAN/prerm" "$DEBIAN/postrm"
 mkdir -p "$OUT"
 dpkg-deb --build --root-owner-group "$PKGROOT" "$OUT/$PKG" >/dev/null
-sha256sum "$OUT/$PKG" > "$OUT/$PKG.sha256"
+(cd "$OUT" && sha256sum "$PKG") > "$OUT/$PKG.sha256"
 printf '%s\n' "$OUT/$PKG"

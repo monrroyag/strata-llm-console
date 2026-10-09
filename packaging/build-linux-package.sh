@@ -24,5 +24,5 @@ cp data/params_help.json "$STAGE/$NAME/data/"
 # Reproducible archive: no local ownership, timestamps or filesystem order.
 tar -C "$STAGE" --sort=name --mtime='UTC 1970-01-01' \
   --owner=0 --group=0 --numeric-owner -czf "$OUT/$NAME.tar.gz" "$NAME"
-sha256sum "$OUT/$NAME.tar.gz" > "$OUT/$NAME.tar.gz.sha256"
+(cd "$OUT" && sha256sum "$NAME.tar.gz") > "$OUT/$NAME.tar.gz.sha256"
 printf '%s\n' "$OUT/$NAME.tar.gz"

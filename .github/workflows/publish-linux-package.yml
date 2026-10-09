@@ -73,7 +73,7 @@ jobs:
           deb_name="$(basename "$(find dist-deb -maxdepth 1 -name '*.deb' -print -quit)")"
           cp "dist-deb/$deb_name" "dist/$deb_name"
           (cd dist && sha256sum "$deb_name" > "$deb_name.sha256")
-          sha256sum dist/install-linux.sh > dist/install-linux.sh.sha256
+          (cd dist && sha256sum install-linux.sh > install-linux.sh.sha256)
       - name: Create GitHub release assets
         env:
           GH_TOKEN: ${{ github.token }}

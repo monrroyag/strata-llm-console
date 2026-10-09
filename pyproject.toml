@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "strata-llm-console"
-version = "0.3.4"
+version = "0.3.5"
 description = "Local Strata control plane, gateway and operations CLI"
 readme = "README.md"
 requires-python = ">=3.10"
