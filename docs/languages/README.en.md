@@ -56,6 +56,18 @@ curl -fsSL https://github.com/monrroyag/strata-llm-console/releases/latest/downl
 
 The installer verifies SHA-256, installs under `~/.local/share/strata-llm-console`, creates a command in `~/.local/bin` and registers a systemd user service when available.
 
+For Debian/Ubuntu with systemd, the same release also provides a native package:
+
+```bash
+VERSION=v0.2.4
+curl -fL -o /tmp/strata-llm-console.deb \
+  "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_all.deb"
+sudo apt install /tmp/strata-llm-console.deb
+sudo systemctl status strata-llm-console --no-pager
+```
+
+The package keeps runtime state in `/var/lib/strata-llm-console` and preserves it across upgrades.
+
 ## Repository safety
 
 Tokens, environment files, traces, logs, GGUF files, packs, binaries and machine-specific paths are excluded from Git. Removing a catalog entry never deletes the original model files.

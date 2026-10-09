@@ -34,6 +34,8 @@ POLL = 2
 MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
+SYSTEM_SERVICE = os.environ.get("STRATA_CONSOLE_SYSTEM_SERVICE", "0") == "1"
+
 lock = threading.Lock()
 try:
     active: str | None = state_store.load_or_migrate("catalog", CATALOG, {"default_model": None}).get("default_model")
@@ -128,7 +130,8 @@ def ready(port: int, mid: str) -> bool:
 
 
 def systemctl(action: str, unit: str) -> bool:
-    result = subprocess.run(["systemctl", "--user", action, unit], check=False,
+    command = ["systemctl"] if SYSTEM_SERVICE else ["systemctl", "--user"]
+    result = subprocess.run(command + [action, unit], check=False,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return result.returncode == 0
 
@@ -143,7 +146,8 @@ def _systemd_quote(value: str) -> str:
 def ensure_unit(entry: dict, cat: dict) -> str:
     """Create a native systemd unit without invoking a shell."""
     unit = unit_name(entry)
-    path = Path.home() / ".config" / "systemd" / "user" / f"{unit}.service"
+    unit_root = Path("/etc/systemd/system") if SYSTEM_SERVICE else Path.home() / ".config" / "systemd" / "user"
+    path = unit_root / f"{unit}.service"
     if path.exists():
         return unit
     cfg_path = safe_child(CONFIGS, Path(entry["config"]).name)
@@ -168,7 +172,7 @@ TimeoutStartSec=0
 KillSignal=SIGINT
 
 [Install]
-WantedBy=default.target
+WantedBy={"multi-user.target" if SYSTEM_SERVICE else "default.target"}
 """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")

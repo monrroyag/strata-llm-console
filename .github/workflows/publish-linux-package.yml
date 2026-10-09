@@ -33,6 +33,8 @@ jobs:
           python -m json.tool catalog.json >/dev/null
           python -m json.tool data/params_help.json >/dev/null
           python -m json.tool docs/api/openapi.json >/dev/null
+          VERSION=0.0.0~ci OUT=dist-deb bash packaging/build-deb.sh
+          dpkg-deb --info dist-deb/*.deb >/dev/null
       - name: Build and inspect bundle
         run: |
           chmod +x packaging/build-linux-package.sh
@@ -54,8 +56,12 @@ jobs:
         run: |
           chmod +x packaging/build-linux-package.sh
           VERSION="${VERSION#v}" ./packaging/build-linux-package.sh
+          VERSION="${VERSION#v}" OUT=dist-deb bash packaging/build-deb.sh
           chmod +x packaging/install-linux.sh
           cp packaging/install-linux.sh dist/install-linux.sh
+          deb_name="$(basename "$(find dist-deb -maxdepth 1 -name '*.deb' -print -quit)")"
+          cp "dist-deb/$deb_name" "dist/$deb_name"
+          (cd dist && sha256sum "$deb_name" > "$deb_name.sha256")
           sha256sum dist/install-linux.sh > dist/install-linux.sh.sha256
       - name: Create GitHub release assets
         env:

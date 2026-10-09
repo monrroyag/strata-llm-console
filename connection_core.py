@@ -14,6 +14,7 @@ from pathlib import Path
 import state_store
 
 BASE = Path(__file__).resolve().parent
+SYSTEM_SERVICE = os.environ.get("STRATA_CONSOLE_SYSTEM_SERVICE", "0") == "1"
 STATE = BASE / "data" / "connection.json"
 DEFAULT_SERVICE = os.environ.get("STRATA_CONSOLE_SERVICE", "strata-llm-console.service")
 
@@ -22,15 +23,16 @@ def service_name() -> str:
     configured = os.environ.get("STRATA_CONSOLE_SERVICE")
     if configured:
         return configured
+    command = ["systemctl"] if SYSTEM_SERVICE else ["systemctl", "--user"]
     for candidate in ("strata-llm-console.service", "hermes-strata-console.service"):
-        result = subprocess.run(["systemctl", "--user", "is-active", candidate],
+        result = subprocess.run(command + ["is-active", candidate],
                                 capture_output=True, text=True, check=False)
         if result.returncode == 0:
             return candidate
     return DEFAULT_SERVICE
 
 
-UNIT_DIR = Path.home() / ".config" / "systemd" / "user" / f"{service_name()}.d"
+UNIT_DIR = (Path("/etc/systemd/system") if SYSTEM_SERVICE else Path.home() / ".config" / "systemd" / "user") / f"{service_name()}.d"
 OVERRIDE = UNIT_DIR / "network.conf"
 
 
@@ -97,7 +99,8 @@ def apply(mode, cors=False):
     )
     data = {"mode": mode, "cors": bool(cors)}
     _save(data)
-    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False,
+    command = ["systemctl"] if SYSTEM_SERVICE else ["systemctl", "--user"]
+    subprocess.run(command + ["daemon-reload"], check=False,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return {"status": "saved", "mode": mode, "cors": bool(cors),
             "service": service_name(),

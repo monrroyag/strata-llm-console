@@ -136,6 +136,23 @@ STRATA_CONSOLE_HOME="$HOME/.local/share/strata-console-test" \
 
 The package contains the console only. Strata engine binaries, GGUF files, model packs and token files stay outside the release artifact. Use `systemctl --user status strata-llm-console` after installation. The default panel is `http://127.0.0.1:8090`.
 
+### Debian/Ubuntu quick install
+
+Each tagged release also includes a native `.deb` package. It installs the console under `/opt/strata-llm-console`, keeps runtime state under `/var/lib/strata-llm-console`, creates a hardened system service and preserves state across package upgrades:
+
+```bash
+VERSION=v0.2.4
+curl -fL -o /tmp/strata-llm-console.deb \
+  "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_all.deb"
+curl -fL -o /tmp/strata-llm-console.deb.sha256 \
+  "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_all.deb.sha256"
+(cd /tmp && sha256sum -c strata-llm-console.deb.sha256)
+sudo apt install /tmp/strata-llm-console.deb
+sudo systemctl status strata-llm-console --no-pager
+```
+
+The `.deb` is intended for Debian/Ubuntu systems with systemd. The portable installer remains available for user-scoped installations without root.
+
 ## GitHub Packages / OCI image
 
 Each version tag publishes an OCI package to:

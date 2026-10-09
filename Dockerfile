@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 COPY backend_core.py connection_core.py console_core.py console_server.py history_core.py job_core.py evaluation_core.py ./
-COPY optimize_core.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py ./
+COPY optimize_core.py state_store.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py ./
 COPY catalog.json .gitignore README.md ./
 COPY configs ./configs
 COPY schemas ./schemas
