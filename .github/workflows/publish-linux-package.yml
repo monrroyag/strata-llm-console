@@ -1,0 +1,61 @@
+name: Publish Linux package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE: ghcr.io/monrroyag/strata-llm-console
+
+jobs:
+  linux-bundle:
+    name: Build and publish Linux bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build reproducible Linux archive
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          chmod +x packaging/build-linux-package.sh
+          VERSION="${VERSION#v}" ./packaging/build-linux-package.sh
+          chmod +x packaging/install-linux.sh
+          cp packaging/install-linux.sh dist/install-linux.sh
+          sha256sum dist/install-linux.sh > dist/install-linux.sh.sha256
+      - name: Create GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Strata LLM Console ${GITHUB_REF_NAME}" \
+            --generate-notes
+
+  container-package:
+    name: Publish OCI package to GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build and push package
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.title=Strata LLM Console
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Local Strata control plane and OpenAI-compatible gateway

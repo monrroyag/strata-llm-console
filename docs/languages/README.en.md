@@ -44,6 +44,16 @@ The allowlisted bot supports status, model selection, stop/unload confirmations,
 ![Model registration](../screenshots/add.png)
 ![Activity](../screenshots/activity.png)
 
+## Linux installation
+
+After a release is published, install the user-scoped Linux bundle with:
+
+```bash
+curl -fsSL https://github.com/monrroyag/strata-llm-console/releases/latest/download/install-linux.sh | bash
+```
+
+The installer verifies SHA-256, installs under `~/.local/share/strata-llm-console`, creates a command in `~/.local/bin` and registers a systemd user service when available.
+
 ## Repository safety
 
 Tokens, environment files, traces, logs, GGUF files, packs, binaries and machine-specific paths are excluded from Git. Removing a catalog entry never deletes the original model files.

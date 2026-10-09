@@ -44,6 +44,16 @@ Der Bot mit Allowlist steuert Status, Modellauswahl, Stoppen, Entladen, Bestäti
 ![Modellregistrierung](../screenshots/add.png)
 ![Aktivität](../screenshots/activity.png)
 
+## Linux-Installation
+
+Nach der Veröffentlichung einer Version installieren Sie das Linux-Paket für den Benutzer mit:
+
+```bash
+curl -fsSL https://github.com/monrroyag/strata-llm-console/releases/latest/download/install-linux.sh | bash
+```
+
+Der Installer prüft SHA-256, installiert nach `~/.local/share/strata-llm-console`, erstellt den Befehl in `~/.local/bin` und registriert bei Verfügbarkeit einen systemd-Benutzerdienst.
+
 ## Sicherheit des Repositorys
 
 Tokens, Umgebungsdateien, Traces, Logs, GGUF, Packs, Binärdateien und computerspezifische Pfade bleiben außerhalb von Git. Das Entfernen eines Katalogeintrags löscht niemals die ursprünglichen Modelldateien.

@@ -21,6 +21,9 @@ models/
 packs/
 *.gguf
 
+# Build artifacts
+dist/
+
 # OS/editor
 .DS_Store
 .vscode/

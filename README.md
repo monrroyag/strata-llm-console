@@ -77,15 +77,49 @@ chmod 600 telegram-control.env
 
 The service example is `telegram-control.service.example`.
 
-## Local development
+## Linux installation
+
+The first distribution target is Linux. The installer is user-scoped, does not require root, verifies SHA-256 before replacing the previous version, installs into `~/.local/share/strata-llm-console`, creates `~/.local/bin/strata-llm-console` and registers a systemd user service when available.
+
+After a release is published:
 
 ```bash
-python3 -m py_compile *.py
-python3 -m unittest -v test_telegram_control_bot.py
-python3 console_server.py
+curl -fsSL https://github.com/monrroyag/strata-llm-console/releases/latest/download/install-linux.sh \
+  | bash
 ```
 
-The default UI is English. Language documentation lives in `docs/languages/README.<locale>.md`.
+The installer supports an explicit version and custom locations:
+
+```bash
+curl -fsSL https://github.com/monrroyag/strata-llm-console/releases/latest/download/install-linux.sh \
+  | bash -s -- v0.1.0
+STRATA_CONSOLE_HOME="$HOME/.local/share/strata-console-test" \
+  bash install-linux.sh v0.1.0
+```
+
+The package contains the console only. Strata engine binaries, GGUF files, model packs and token files stay outside the release artifact. Use `systemctl --user status strata-llm-console` after installation. The default panel is `http://127.0.0.1:8090`.
+
+## GitHub Packages / OCI image
+
+Each version tag publishes an OCI package to:
+
+```text
+ghcr.io/monrroyag/strata-llm-console:latest
+ghcr.io/monrroyag/strata-llm-console:<version>
+```
+
+Pull and run it on Linux with Docker or Podman:
+
+```bash
+docker pull ghcr.io/monrroyag/strata-llm-console:latest
+docker run --rm --name strata-llm-console \
+  -p 8090:8090 \
+  -v strata-console-data:/app/data \
+  ghcr.io/monrroyag/strata-llm-console:latest
+```
+
+The image is non-root, has a health check, uses Python’s standard library only, and exposes the same panel and API. The native installer is the recommended mode when the console must control host systemd units and local Strata processes.
+
 
 ## Language selector
 

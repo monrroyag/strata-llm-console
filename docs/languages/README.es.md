@@ -44,6 +44,16 @@ El bot con lista permitida controla estado, selección de modelos, detención, d
 ![Alta de modelo](../screenshots/add.png)
 ![Actividad](../screenshots/activity.png)
 
+## Instalación en Linux
+
+Después de publicar una versión, instala el paquete Linux para el usuario con:
+
+```bash
+curl -fsSL https://github.com/monrroyag/strata-llm-console/releases/latest/download/install-linux.sh | bash
+```
+
+El instalador verifica SHA-256, instala en `~/.local/share/strata-llm-console`, crea el comando en `~/.local/bin` y registra un servicio systemd de usuario cuando está disponible.
+
 ## Seguridad del repositorio
 
 Los tokens, archivos de entorno, trazas, logs, GGUF, packs, binarios y rutas específicas del equipo quedan fuera de Git. Quitar un modelo del catálogo nunca elimina sus archivos originales.
