@@ -1,0 +1,27 @@
+.env
+*.env
+!.env.example
+.token
+token
+*.key
+*.pem
+
+# Runtime state
+data/*.jsonl
+data/*.json
+data/telegram-offset
+logs/
+__pycache__/
+*.pyc
+*.json.bak
+
+# Local engine/model artifacts
+engine/
+models/
+packs/
+*.gguf
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strata Console</title>
+<link rel="stylesheet" href="/web/app.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="ident">
+    <span class="glyph">☤</span>
+    <div>
+      <div class="name">STRATA CONSOLE</div>
+      <div class="crumb" id="crumb" data-t="crumb">Strata connector ↔ agents</div>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="views">
+    <details class="nav-group" open><summary data-t="nav_operate">Operate</summary><div class="nav-menu">
+      <button class="tab on" data-v="models" data-t="tab_models"></button>
+      <button class="tab" data-v="params" data-t="tab_params"></button>
+      <button class="tab" data-v="opt" data-t="tab_opt"></button>
+    </div></details>
+    <details class="nav-group"><summary data-t="nav_observe">Observe</summary><div class="nav-menu">
+      <button class="tab" data-v="perf" data-t="tab_perf"></button>
+      <button class="tab" data-v="traces" data-t="tab_traces"></button>
+      <button class="tab" data-v="log" data-t="tab_log"></button>
+    </div></details>
+    <details class="nav-group"><summary data-t="nav_connect">Connect</summary><div class="nav-menu">
+      <button class="tab" data-v="connection" data-t="tab_connection"></button>
+      <button class="tab" data-v="tunnel" data-t="tab_tunnel"></button>
+    </div></details>
+    <details class="nav-group"><summary data-t="nav_system">System</summary><div class="nav-menu">
+      <button class="tab" data-v="update" data-t="tab_update"></button>
+      <button class="tab" data-v="add" data-t="tab_add"></button>
+      <button class="tab" data-v="prefs" data-t="tab_prefs"></button>
+    </div></details>
+  </nav>
+
+  <div class="gauges">
+    <div class="g" data-t="g_vram" title="VRAM"><span class="gl">VRAM</span>
+      <div class="bar"><i id="gVram"></i></div><span class="gv" id="gVramT">—</span></div>
+    <div class="g" data-t="g_ram" title="RAM"><span class="gl">RAM</span>
+      <div class="bar"><i id="gRam"></i></div><span class="gv" id="gRamT">—</span></div>
+    <div class="g" data-t="g_gpu" title="GPU"><span class="gl">GPU</span>
+      <div class="bar"><i id="gUtil"></i></div><span class="gv" id="gUtilT">—</span></div>
+    <span class="pill" id="gEnv">—</span>
+    <select id="lang" aria-label="language"><option value="en">EN</option><option value="es">ES</option><option value="pt">PT</option><option value="fr">FR</option><option value="de">DE</option></select>
+    <input id="tok" type="password" placeholder="token" autocomplete="off" aria-label="token">
+    <button id="saveTok" class="gh">OK</button>
+  </div>
+</header>
+
+<div class="switchbar">
+  <span class="lbl" data-t="active_model"></span>
+  <div class="chips" id="chips"></div>
+  <span class="spacer"></span>
+  <span class="pill" id="updTag" hidden></span>
+  <span class="pill" id="tunTag" hidden></span>
+  <span class="live" id="liveTag">—</span>
+  <span class="rate" id="rateTag">—</span>
+</div>
+
+<main>
+  <!-- RESUMEN OPERATIVO -->
+  <section class="overview-grid" aria-label="resumen operativo">
+    <div class="overview-main">
+      <div class="eyebrow"><span class="pulse"></span><span data-t="ov_eyebrow">CONTROL PLANE · LOCAL</span></div>
+      <h1 data-t="ov_title">Orquestación de modelos</h1>
+      <p data-t="ov_subtitle">Un punto de control para Strata, Hermes y tus agentes.</p>
+      <div class="overview-actions">
+        <button id="ovRefresh" class="pri" data-t="ov_refresh">actualizar estado</button>
+        <button id="ovOptimize" class="gh" data-t="ov_optimize">optimizar contexto</button>
+        <button id="ovParams" class="gh" data-t="ov_params">editar parámetros</button>
+      </div>
+    </div>
+    <div class="overview-kpis">
+      <div class="okpi"><span data-t="ov_active">MODELO ACTIVO</span><b id="ovActive">—</b><small id="ovActivePort">—</small></div>
+      <div class="okpi"><span data-t="ov_context">CONTEXTO</span><b id="ovContext">—</b><small id="ovKv">—</small></div>
+      <div class="okpi"><span data-t="ov_load">CARGA GPU</span><b id="ovLoad">—</b><small id="ovGpuTemp">—</small></div>
+      <div class="okpi"><span data-t="ov_catalog">CATÁLOGO</span><b id="ovModels">—</b><small data-t="ov_catalog_sub">modelos registrados</small></div>
+    </div>
+  </section>
+
+  <!-- MODELOS -->
+  <section class="view on" data-v="models">
+    <div class="sec">
+      <div class="sech"><h2 data-t="inv_title"></h2>
+        <span class="hint" data-t="inv_hint"></span></div>
+      <div class="tbl-wrap">
+        <table class="tbl" id="tblModels">
+          <thead><tr>
+            <th data-t="c_model"></th><th class="n" data-t="c_state"></th><th class="n" data-t="c_port"></th>
+            <th class="n" data-t="c_toks"></th><th class="n" data-t="c_ctx"></th><th class="n" data-t="c_kv"></th>
+            <th class="n" data-t="c_vramfree"></th><th class="n" data-t="c_eng"></th><th class="n" data-t="c_acts"></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="sec" id="detailSec" hidden>
+      <div class="sech"><h2><span data-t="detail"></span> <span id="dTitle">—</span></h2>
+        <button class="x" id="dClose" data-t="close"></button></div>
+      <div class="kvgrid" id="dKv"></div>
+      <div class="sub"><h3 data-t="last_req"></h3>
+        <div class="tbl-wrap"><table class="tbl" id="tblReq">
+          <thead><tr><th data-t="c_time"></th><th class="n" data-t="c_dur"></th><th class="n" data-t="c_prompt"></th>
+            <th class="n" data-t="c_out"></th><th class="n" data-t="c_toks"></th><th class="n" data-t="c_hit"></th>
+            <th class="n" data-t="c_mtp"></th></tr></thead>
+          <tbody></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RENDIMIENTO / HISTORIAL -->
+  <section class="view" data-v="perf">
+    <div class="sec">
+      <div class="sech"><h2 data-t="live_title"></h2><span class="hint" id="perfSrc">—</span></div>
+      <div class="metrics" id="metrics"></div>
+    </div>
+    <div class="sec">
+      <div class="sech"><h2 data-t="hist_title"></h2>
+        <span class="hint" data-t="hist_hint"></span>
+        <select id="histRange"><option value="3600">1h</option><option value="21600">6h</option><option value="86400" selected>24h</option><option value="604800">7d</option></select>
+      </div>
+      <div class="chart"><canvas id="chart" width="1200" height="220"></canvas></div>
+    </div>
+    <div class="sec">
+      <div class="sech"><h2 data-t="cmp_title"></h2><span class="hint" data-t="cmp_hint"></span></div>
+      <div class="tbl-wrap"><table class="tbl" id="tblCmp">
+        <thead><tr><th data-t="c_setup"></th><th class="n" data-t="c_samples"></th><th class="n" data-t="c_tokavg"></th><th class="n" data-t="c_pre"></th></tr></thead>
+        <tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- TRAZABILIDAD -->
+  <section class="view" data-v="traces">
+    <div class="trace-layout">
+      <div class="sec trace-list-sec">
+        <div class="sech"><h2 data-t="trace_title">Trazabilidad de requests</h2><button id="traceRefresh" class="gh" data-t="trace_refresh">actualizar</button></div>
+        <div id="traceList" class="trace-list"><div class="trace-empty" data-t="trace_empty">Todavía no hay requests observados.</div></div>
+      </div>
+      <div class="sec trace-detail-sec">
+        <div class="sech"><h2 data-t="trace_detail">Detalle de ejecución</h2><span id="traceState" class="hint">—</span></div>
+        <div id="traceDetail" class="trace-detail"><div class="trace-empty" data-t="trace_select">Selecciona una request para ver pensamiento, respuesta y métricas.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONEXION -->
+  <section class="view" data-v="connection">
+    <div class="connection-grid">
+      <div class="sec">
+        <div class="sech"><h2 data-t="conn_title">Conexión y exposición</h2><button id="connRefresh" class="gh" data-t="conn_refresh">actualizar</button></div>
+        <div class="connection-body">
+          <div class="conn-mode"><span class="conn-dot" id="connDot"></span><div><b id="connMode">—</b><small id="connModeNote">—</small></div></div>
+          <label class="conn-choice"><span data-t="conn_mode_label">Modo de escucha</span><select id="connModeSelect"><option value="local" data-t="conn_local">Solo este PC</option><option value="lan" data-t="conn_lan">Red local</option></select></label>
+          <label class="conn-choice check"><input id="connCors" type="checkbox"><span data-t="conn_cors">Permitir CORS para clientes web</span></label>
+          <button id="connApply" class="pri" data-t="conn_apply">guardar y preparar cambio</button>
+          <div class="security-note" data-t="conn_security">La API local no se expone por defecto. Al abrirla en red, los clientes remotos deben usar el token Bearer.</div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sech"><h2 data-t="conn_urls">Cómo conectar otro PC</h2></div>
+        <div class="connection-body" id="connUrls"><div class="trace-empty">—</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PREFERENCIAS -->
+  <section class="view" data-v="prefs">
+    <div class="sec">
+      <div class="sech"><h2 data-t="prefs_title">Preferencias de uso</h2><button id="prefsReset" class="gh" data-t="prefs_reset">restaurar</button></div>
+      <div class="prefs-grid">
+        <label><span data-t="prefs_theme">Tema visual</span><select id="prefTheme"><option value="dark" data-t="pref_dark">Oscuro</option><option value="ink" data-t="pref_ink">Índigo</option><option value="light" data-t="pref_light">Claro</option></select></label>
+        <label><span data-t="prefs_density">Densidad de datos</span><select id="prefDensity"><option value="compact" data-t="pref_compact">Compacta</option><option value="comfortable" data-t="pref_comfort">Cómoda</option></select></label>
+        <label class="pref-check"><input id="prefMotion" type="checkbox"><span data-t="prefs_motion">Reducir animaciones</span></label>
+        <label class="pref-check"><input id="prefReasoning" type="checkbox" checked><span data-t="prefs_reasoning">Mostrar razonamiento en trazas</span></label>
+      </div>
+      <div class="prefs-help" data-t="prefs_help">Estas preferencias se guardan solo en este navegador. No cambian Strata ni consumen recursos del modelo.</div>
+    </div>
+    <div class="sec">
+      <div class="sech"><h2 data-t="quick_help_title">Qué hace cada sección</h2></div>
+      <div class="quick-help" id="quickHelp"></div>
+    </div>
+  </section>
+
+  <!-- PARAMETROS -->
+  <section class="view" data-v="params">
+    <div class="sec">
+      <div class="sech"><h2><span data-t="params_title"></span> <span id="pTarget">—</span></h2>
+        <div class="right">
+          <button id="cfgBtn" class="pri" data-t="save"></button>
+          <button id="restartBtn" class="gh" data-t="restart_apply"></button>
+        </div></div>
+      <div class="pgrid" id="pgrid"></div>
+      <p class="hint" id="pFile">—</p>
+      <p class="hint" data-t="params_note"></p>
+    </div>
+  </section>
+
+  <!-- OPTIMIZADOR -->
+  <section class="view" data-v="opt">
+    <div class="sec">
+      <div class="sech"><h2 data-t="opt_title"></h2>
+        <div class="right">
+          <select id="optProfile">
+            <option value="balanced" data-t="opt_bal"></option>
+            <option value="speed" data-t="opt_speed"></option>
+            <option value="long" data-t="opt_long"></option>
+            <option value="code" data-t="opt_code"></option>
+          </select>
+          <input id="optCtx" type="number" step="10000" value="200000" style="width:9em">
+          <button id="optBtn" class="pri" data-t="opt_run"></button>
+        </div></div>
+      <p class="hint" data-t="opt_hint"></p>
+      <div id="optOut"></div>
+    </div>
+  </section>
+
+  <!-- ACTUALIZACION -->
+  <section class="view" data-v="update">
+    <div class="sec">
+      <div class="sech"><h2 data-t="upd_title"></h2>
+        <div class="right"><button id="chkBtn" class="gh" data-t="upd_check"></button>
+        <button id="updBtn" class="pri" data-t="upd_apply" disabled></button></div></div>
+      <div class="kvgrid" id="updKv"></div>
+      <div class="callout" id="updNote"></div>
+    </div>
+  </section>
+
+  <!-- TUNEL -->
+  <section class="view" data-v="tunnel">
+    <div class="sec">
+      <div class="sech"><h2 data-t="tun_title"></h2>
+        <div class="right"><button id="tunStart" class="pri" data-t="tun_start"></button>
+        <button id="tunStop" class="gh" data-t="tun_stop"></button></div></div>
+      <div class="kvgrid" id="tunKv"></div>
+      <div class="callout" data-t="tun_note"></div>
+    </div>
+  </section>
+
+  <!-- ALTA -->
+  <section class="view" data-v="add">
+    <div class="sec">
+      <div class="sech"><h2 data-t="add_title"></h2>
+        <div class="right"><button id="fitBtn" class="gh" data-t="fit_btn"></button></div></div>
+      <div class="form">
+        <label class="wide" data-t="f_gguf"><input id="gguf" autocomplete="off"></label>
+        <label data-t="f_id"><input id="nid" autocomplete="off"></label>
+        <label data-t="f_label"><input id="nlabel" autocomplete="off"></label>
+        <label data-t="f_port"><input id="nport" autocomplete="off" inputmode="numeric"></label>
+        <label class="wide" data-t="f_pack"><input id="npack" autocomplete="off"></label>
+        <label class="wide" data-t="f_prof"><input id="nprof" autocomplete="off"></label>
+        <div class="wide" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="addBtn" class="pri" data-t="add_btn"></button>
+          <span class="hint" data-t="fit_ctx_lbl"></span>
+          <input id="fitCtx" type="number" step="10000" value="200000" style="width:9em">
+          <select id="fitKvSel"><option value="q4_0">q4_0</option><option value="k8v4">k8v4</option><option value="int8">int8</option><option value="fp16">fp16</option></select>
+        </div>
+      </div>
+      <div class="kvgrid" id="fitKv" hidden></div>
+      <div class="callout" data-t="add_note"></div>
+    </div>
+  </section>
+
+  <!-- LOG -->
+  <section class="view" data-v="log">
+    <div class="sec">
+      <div class="sech"><h2 data-t="log_title"></h2>
+        <button class="x" id="clearLog" data-t="clear"></button></div>
+      <pre id="log">—</pre>
+    </div>
+  </section>
+</main>
+
+<div class="status" id="status"></div>
+<script src="/web/i18n.js"></script>
+<script src="/web/app.js"></script>
+</body>
+</html>

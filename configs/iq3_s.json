@@ -1,0 +1,33 @@
+{
+  "exe": "./engine-censored/strata",
+  "args": [
+    "--pack", "./packs/model",
+    "--native", "./models/native.gguf",
+    "--ple-gguf", "./models/ple.gguf",
+    "--expert-profile", "./data/expert-profile.bin",
+    "--expert-cache", "auto",
+    "--prefill", "auto",
+    "--spec", "6",
+    "--spec-min-p", "0.70",
+    "--mtp", "./data/mtp/rt",
+    "--max-context", "200000",
+    "--kv", "q4_0",
+    "--vision",
+    "--vram-reserve-mib", "700",
+    "--pcie-frac", "0.35",
+    "--adapt-every", "1",
+    "--adapt-swaps", "80",
+    "--adapt-decay", "0.97",
+    "--lookup-chain", "8"
+  ],
+  "cwd": ".",
+  "tokenizer": "./packs/model/tokenizer",
+  "model_name": "model",
+  "log": "./logs/model.log",
+  "lib_dirs": ["/usr/bin", "/usr/lib64"],
+  "port": 8082,
+  "gpu": 0,
+  "gpus_asked": true,
+  "open_browser": false,
+  "vision": false
+}
