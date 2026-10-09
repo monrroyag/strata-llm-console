@@ -19,7 +19,7 @@ Cette console est une couche opérationnelle pour le [moteur officiel d’infér
 
 - Passerelle OpenAI : `http://127.0.0.1:8090/v1`
 - API de contrôle : `http://127.0.0.1:8090/api`
-- L’accès distant exige `Authorization: Bearer <console-token>`.
+- L’accès distant exige `Authorization: Bearer $STRATA_CONSOLE_TOKEN`.
 - L’adresse par défaut est loopback; le LAN et CORS sont opt-in.
 
 ## Optimiseur

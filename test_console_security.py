@@ -7,6 +7,7 @@ from unittest.mock import patch
 import console_core
 import evaluation_core
 import history_core
+import optimize_core
 import tunnel_core
 import update_core
 
@@ -60,6 +61,14 @@ class ConsoleSecurityTests(unittest.TestCase):
         score = evaluation_core._score(metrics, metrics)
         self.assertIn("score", score)
         self.assertGreaterEqual(score["long_short_speed_ratio"], 0)
+        self.assertEqual(metrics["usage_coverage"], 0)
+
+    def test_optimizer_reports_evidence_when_telemetry_is_missing(self):
+        with patch.object(optimize_core, "_gpu", return_value={"measured": False, "free_mib": None, "total_mib": None, "gpu_count": 0}):
+            result = optimize_core.optimize(200000, profile="balanced", entry=None)
+        self.assertEqual(result["confidence"], "baja")
+        self.assertIn("GPU telemetry unavailable", result["confidence_reasons"])
+        self.assertFalse(result["evidence"]["gpu_measured"])
 
         root = Path(__file__).parent
         self.assertTrue((root / "data" / "params_help.json").is_file())

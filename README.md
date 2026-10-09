@@ -28,7 +28,7 @@ The gateway is OpenAI-compatible:
 http://127.0.0.1:8090/v1
 ```
 
-The control API is local by default and uses `X-Strata-Token` or `Authorization: Bearer <console-token>`.
+The control API is local by default and uses `X-Strata-Token` or `Authorization: Bearer $STRATA_CONSOLE_TOKEN`.
 
 Important endpoints:
 

@@ -19,7 +19,7 @@ This console is an operational layer for the [official Strata inference engine](
 
 - OpenAI gateway: `http://127.0.0.1:8090/v1`
 - Control API: `http://127.0.0.1:8090/api`
-- Remote access requires `Authorization: Bearer <console-token>`.
+- Remote access requires `Authorization: Bearer $STRATA_CONSOLE_TOKEN`.
 - The default bind address is loopback; LAN and CORS are opt-in.
 
 ## Optimizer

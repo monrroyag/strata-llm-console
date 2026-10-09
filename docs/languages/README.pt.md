@@ -19,7 +19,7 @@ Esta consola é uma camada operacional para o [motor oficial de inferência Stra
 
 - Gateway OpenAI: `http://127.0.0.1:8090/v1`
 - API de controle: `http://127.0.0.1:8090/api`
-- O acesso remoto exige `Authorization: Bearer <console-token>`.
+- O acesso remoto exige `Authorization: Bearer $STRATA_CONSOLE_TOKEN`.
 - O endereço padrão é loopback; LAN e CORS exigem ativação explícita.
 
 ## Otimizador

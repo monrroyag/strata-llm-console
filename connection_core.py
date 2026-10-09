@@ -68,7 +68,7 @@ def status(host, port, token_file):
         "panel_local_url": f"http://127.0.0.1:{port}/",
         "panel_lan_url": f"http://{ip}:{port}/" if lan else None,
         "auth_remote_required": True,
-        "auth_header": "Authorization: Bearer <token de consola>",
+        "auth_header": "Authorization: Bearer $STRATA_CONSOLE_TOKEN",
         "token_file": str(token_file),
         "cors": bool(state.get("cors", False)),
         "tunnel_managed_separately": True,

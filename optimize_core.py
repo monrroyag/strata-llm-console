@@ -1,6 +1,7 @@
 """Analizador de configuración de Strata: hardware + config + historial."""
 from __future__ import annotations
 import json, subprocess
+from collections import deque
 from pathlib import Path
 BASE=Path(__file__).resolve().parent; HIST=BASE/'data'/'history'
 EXPERT_MIN_MIB=3000
@@ -8,19 +9,23 @@ KV_BPT={'fp16':273*1024,'int8':137*1024,'q4_0':68*1024,'k8v4':106*1024}
 
 def _gpu():
     try:
-        r=subprocess.run(['nvidia-smi','--query-gpu=memory.free,memory.total,utilization.gpu','--format=csv,noheader,nounits'],capture_output=True,text=True,timeout=6)
-        free,total,util=[int(x.strip()) for x in r.stdout.strip().split(',')[:3]]
-        return {'free_mib':free,'total_mib':total,'util_pct':util,'measured':True}
+        r=subprocess.run(['nvidia-smi','--query-gpu=memory.free,memory.total,utilization.gpu','--format=csv,noheader,nounits'],capture_output=True,text=True,timeout=6,check=True)
+        rows=[]
+        for line in r.stdout.splitlines():
+            parts=[int(x.strip()) for x in line.split(',')[:3]]
+            if len(parts)==3: rows.append(parts)
+        if not rows: raise ValueError('nvidia-smi returned no GPU rows')
+        return {'free_mib':sum(x[0] for x in rows),'total_mib':sum(x[1] for x in rows),'util_pct':round(sum(x[2] for x in rows)/len(rows),1),'gpu_count':len(rows),'measured':True}
     except (OSError, ValueError, subprocess.SubprocessError):
-        return {'free_mib':None,'total_mib':None,'util_pct':None,'measured':False}
+        return {'free_mib':None,'total_mib':None,'util_pct':None,'gpu_count':0,'measured':False}
 
 def _ram():
     try:
         vals={}
         for line in Path('/proc/meminfo').read_text().splitlines():
             k,v=line.split(':',1);vals[k]=int(v.strip().split()[0])//1024
-        return {'available_mib':vals.get('MemAvailable',0),'total_mib':vals.get('MemTotal',0)}
-    except Exception:return {'available_mib':0,'total_mib':0}
+        return {'available_mib':vals.get('MemAvailable',0),'total_mib':vals.get('MemTotal',0),'measured':bool(vals.get('MemAvailable'))}
+    except Exception:return {'available_mib':0,'total_mib':0,'measured':False}
 
 def _setup(entry):
     if not entry:return {}
@@ -34,15 +39,18 @@ def _setup(entry):
     except (OSError,ValueError,KeyError):return {}
 
 def _history(ctx,mid=None):
-    rows=[];paths=[HIST/f'{mid}.jsonl'] if mid else list(HIST.glob('*.jsonl'))
+    rows=deque(maxlen=500);paths=[HIST/f'{mid}.jsonl'] if mid else list(HIST.glob('*.jsonl'))
     for p in paths:
         if not p.exists():continue
-        for line in p.read_text(encoding='utf-8').splitlines():
-            try:
-                r=json.loads(line)
-                if abs(int(r.get('max_context') or 0)-ctx)<=max(4096,ctx//20) and r.get('tok_s_mean'):rows.append(r)
-            except (ValueError,TypeError):pass
-    return rows[-500:]
+        try:
+            with p.open(encoding='utf-8') as fh:
+                for line in fh:
+                    try:
+                        r=json.loads(line)
+                        if abs(int(r.get('max_context') or 0)-ctx)<=max(4096,ctx//20) and r.get('tok_s_mean'):rows.append(r)
+                    except (ValueError,TypeError,json.JSONDecodeError):continue
+        except OSError:continue
+    return list(rows)
 
 def _weights(entry):
     if not entry:return None
@@ -80,4 +88,13 @@ def optimize(target_ctx,profile='balanced',entry=None,prefer=None):
     cands.sort(key=lambda x:(-x['feasible'],-x['score']));best=cands[0] if cands and cands[0]['feasible'] else None;hist=sorted(rows,key=lambda x:-(x.get('tok_s_mean') or 0))[:3]
     confidence='alta' if best and hist and gpu.get('measured') and entry else 'media' if best and gpu.get('measured') else 'baja'
     if best and setup.get('kv')==best['config']['kv'] and gpu.get('measured') and hist:confidence='alta'
-    return {'target_context':ctx,'profile':profile,'analysis_mode':'hardware + configuración + historial local','model':entry.get('id') if entry else None,'hardware':gpu,'ram':ram,'weights_gib':_weights(entry),'current_config':setup,'recommended':best,'alternatives':[x for x in cands if x is not best][:4],'historical_evidence':hist,'confidence':confidence,'constraints':['VRAM expert cache >= 3000 MiB','KV RAM <= 55% de RAM disponible','una instancia Strata por GPU en esta máquina'],'note':'Recomendación estática contrastada con historial; ejecuta benchmark para una decisión SLO.','apply_endpoint':'POST /api/config con recommended.config + reinicio'}
+    confidence_reasons=[]
+    if not gpu.get('measured'): confidence_reasons.append('GPU telemetry unavailable')
+    elif gpu.get('gpu_count',1)>1: confidence_reasons.append(f"aggregated telemetry from {gpu['gpu_count']} GPUs")
+    if not ram.get('measured'): confidence_reasons.append('RAM telemetry unavailable')
+    if not entry: confidence_reasons.append('no model selected')
+    if not setup: confidence_reasons.append('current model configuration unavailable')
+    if not hist: confidence_reasons.append('no matching historical measurements')
+    if entry and _weights(entry) is None: confidence_reasons.append('model weight size unavailable')
+    if not confidence_reasons: confidence_reasons.append('hardware, current configuration and matching history are available')
+    return {'target_context':ctx,'profile':profile,'analysis_mode':'hardware + configuration + local history','model':entry.get('id') if entry else None,'hardware':gpu,'ram':ram,'weights_gib':_weights(entry),'current_config':setup,'recommended':best,'alternatives':[x for x in cands if x is not best][:4],'historical_evidence':hist,'confidence':confidence,'confidence_reasons':confidence_reasons,'evidence':{'gpu_measured':bool(gpu.get('measured')),'ram_measured':bool(ram.get('measured')),'configuration_loaded':bool(setup),'historical_samples':len(rows),'weights_measured':_weights(entry) is not None},'constraints':['expert cache headroom >= 3000 MiB','KV RAM <= 55% of available RAM','one Strata instance per GPU on this machine'],'note':'Static recommendation cross-checked with local history; run measured evaluation for an SLO decision.','apply_endpoint':'POST /api/config with recommended.config + restart'}

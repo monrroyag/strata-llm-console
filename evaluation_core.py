@@ -100,16 +100,18 @@ def _request(port: int, model: str, prompt: str, timeout: int = 180) -> dict:
             payload = json.loads(response.read(8 * 1024 * 1024) or b"{}")
         duration = time.perf_counter() - started
         usage = payload.get("usage") or {}
+        usage_available = bool(usage.get("completion_tokens") is not None)
         prompt_tokens = int(usage.get("prompt_tokens") or max(1, len(prompt) // 4))
-        output_tokens = int(usage.get("completion_tokens") or 0)
+        output_tokens = int(usage.get("completion_tokens") or 0) if usage_available else None
         return {"ok": True, "duration_ms": round(duration * 1000, 1),
                 "prompt_tokens": prompt_tokens, "completion_tokens": output_tokens,
-                "decode_tok_s": round(output_tokens / duration, 2) if output_tokens else None,
+                "usage_available": usage_available,
+                "decode_tok_s": round(output_tokens / duration, 2) if output_tokens and output_tokens > 0 else None,
                 "error": None}
     except (OSError, ValueError, urllib.error.URLError, TimeoutError) as exc:
         return {"ok": False, "duration_ms": round((time.perf_counter() - started) * 1000, 1),
                 "prompt_tokens": max(1, len(prompt) // 4), "completion_tokens": 0,
-                "decode_tok_s": None, "error": f"{type(exc).__name__}: {exc}"[:500]}
+                "usage_available": False, "decode_tok_s": None, "error": f"{type(exc).__name__}: {exc}"[:500]}
 
 
 def _percentile(values: list[float], pct: float):
@@ -127,6 +129,7 @@ def _aggregate(samples: list[dict]) -> dict:
     return {
         "samples": len(samples), "successful": len(ok), "errors": len(samples) - len(ok),
         "success_rate": round(len(ok) / len(samples), 3) if samples else 0,
+        "usage_coverage": round(sum(1 for row in ok if row.get("usage_available")) / len(ok), 3) if ok else 0,
         "latency_ms": {"p50": _percentile(latencies, .50), "p95": _percentile(latencies, .95),
                         "mean": round(statistics.mean(latencies), 2) if latencies else None,
                         "stdev": round(statistics.stdev(latencies), 2) if len(latencies) > 1 else 0},
@@ -141,11 +144,13 @@ def _aggregate(samples: list[dict]) -> dict:
 def _score(short: dict, long: dict) -> dict:
     speed = (short["decode_tok_s"]["mean"] or 0) * .35 + (long["decode_tok_s"]["mean"] or 0) * .65
     reliability = ((short["success_rate"] + long["success_rate"]) / 2) * 100
+    measurement_quality = ((short.get("usage_coverage", 0) + long.get("usage_coverage", 0)) / 2) * 100
     latency = long["latency_ms"]["p95"] or 999999
     stability = max(0, 100 - ((long["latency_ms"]["stdev"] or 0) / max(1, long["latency_ms"]["mean"] or 1) * 100))
-    score = speed + reliability * .8 + stability * .2 - min(50, latency / 10000)
+    score = speed + reliability * .8 + stability * .2 + measurement_quality * .15 - min(50, latency / 10000)
     return {"score": round(score, 2), "speed_component": round(speed, 2),
             "reliability_component": round(reliability, 2), "stability_component": round(stability, 2),
+            "measurement_quality": round(measurement_quality, 2),
             "long_short_speed_ratio": round((long["decode_tok_s"]["mean"] or 0) / max(.01, short["decode_tok_s"]["mean"] or .01), 3)}
 
 

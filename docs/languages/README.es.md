@@ -19,7 +19,7 @@ Esta consola es una capa operativa para el [motor oficial de inferencia Strata](
 
 - Gateway OpenAI: `http://127.0.0.1:8090/v1`
 - API de control: `http://127.0.0.1:8090/api`
-- El acceso remoto exige `Authorization: Bearer <console-token>`.
+- El acceso remoto exige `Authorization: Bearer $STRATA_CONSOLE_TOKEN`.
 - La dirección local es loopback; LAN y CORS requieren activación explícita.
 
 ## Optimizador

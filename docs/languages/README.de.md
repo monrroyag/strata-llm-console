@@ -19,7 +19,7 @@ Diese Konsole ist eine Betriebsschicht für die [offizielle Strata-Inferenz-Engi
 
 - OpenAI-Gateway: `http://127.0.0.1:8090/v1`
 - Steuerungs-API: `http://127.0.0.1:8090/api`
-- Der Fernzugriff erfordert `Authorization: Bearer <console-token>`.
+- Der Fernzugriff erfordert `Authorization: Bearer $STRATA_CONSOLE_TOKEN`.
 - Standardmäßig wird nur Loopback verwendet; LAN und CORS sind optional.
 
 ## Optimierer
