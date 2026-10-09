@@ -11,6 +11,8 @@ import socket
 import subprocess
 from pathlib import Path
 
+import state_store
+
 BASE = Path(__file__).resolve().parent
 STATE = BASE / "data" / "connection.json"
 DEFAULT_SERVICE = os.environ.get("STRATA_CONSOLE_SERVICE", "strata-llm-console.service")
@@ -33,16 +35,22 @@ OVERRIDE = UNIT_DIR / "network.conf"
 
 
 def _load():
-    try:
-        data = json.loads(STATE.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        return {}
+    if STATE != BASE / "data" / "connection.json":
+        try:
+            data = json.loads(STATE.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+    return state_store.load_or_migrate("connection", STATE, {})
 
 
 def _save(data):
-    STATE.parent.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if STATE != BASE / "data" / "connection.json":
+        STATE.parent.mkdir(parents=True, exist_ok=True)
+        state_store.atomic_json_export(STATE, data, mode=0o600)
+        return
+    state_store.put("connection", data)
+    state_store.atomic_json_export(STATE, data, mode=0o600)
 
 
 def host_ip():

@@ -168,6 +168,17 @@ The image is non-root, has a health check, uses Python’s standard library only
 
 English is the default language for a new installation. The selected locale is persisted in the browser and can be changed from the header or Preferences section.
 
+## Runtime persistence
+
+Control-plane metadata is stored transactionally in `data/state.sqlite3` using SQLite WAL mode and full synchronous commits. On first startup, the store imports existing legacy JSON files and keeps atomic compatibility exports for older tools:
+
+- catalog metadata;
+- connection mode/CORS settings;
+- tunnel lifecycle metadata;
+- Telegram locale preferences.
+
+The state database and compatibility files are local runtime artifacts, ignored by Git, protected with mode `0600`, and never contain model weights or API secrets. Jobs continue using their bounded SQLite queue; traces and performance history remain bounded append-only stores with clipped fields.
+
 ## Runtime layout
 
 - `catalog.json` — sanitized catalog template.

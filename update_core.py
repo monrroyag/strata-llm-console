@@ -10,10 +10,17 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
+import state_store
+
 BASE = Path(__file__).resolve().parent
 CATALOG = BASE / "catalog.json"
 OFFICIAL_REPO = "https://github.com/Niko1221/Strata.git"
 ENGINE_INSTALL = BASE / "data" / "engine" / "Strata"
+
+
+def _save_catalog(cat: dict) -> None:
+    state_store.put("catalog", cat)
+    state_store.atomic_json_export(CATALOG, cat, mode=0o600)
 
 
 def validate_repo_url(repo: str) -> str:
@@ -38,9 +45,7 @@ def ensure_engine(cat: dict) -> dict:
                        capture_output=True, text=True, timeout=600)
     cat["engine_root"] = str(ENGINE_INSTALL)
     cat.setdefault("update", {})["repo_url"] = repo
-    tmp = CATALOG.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(cat, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(CATALOG)
+    _save_catalog(cat)
     return {"present": True, "installed": True, "root": str(ENGINE_INSTALL), "repo_url": repo}
 
 
@@ -97,9 +102,7 @@ def check_update(cat: dict, fetch: bool = True) -> dict:
             pass
         info["local_dirty"] = bool(_git(root, "status", "--porcelain"))
         cat.setdefault("update", {}).update(info)
-        tmp = CATALOG.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(cat, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        tmp.replace(CATALOG)
+        _save_catalog(cat)
     except Exception as exc:
         info["error"] = str(exc)
     return info

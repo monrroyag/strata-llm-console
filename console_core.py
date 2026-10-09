@@ -20,6 +20,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import state_store
+
 BASE = Path(__file__).resolve().parent
 CATALOG = BASE / "catalog.json"
 CONFIGS = BASE / "configs"
@@ -34,7 +36,7 @@ MAX_BODY_BYTES = 8 * 1024 * 1024
 
 lock = threading.Lock()
 try:
-    active: str | None = json.loads(CATALOG.read_text(encoding="utf-8")).get("default_model")
+    active: str | None = state_store.load_or_migrate("catalog", CATALOG, {"default_model": None}).get("default_model")
 except (OSError, ValueError, TypeError):
     active = None
 jobs: dict[str, dict] = {}
@@ -64,14 +66,13 @@ def validate_catalog(cat: dict) -> dict:
 
 
 def load_catalog() -> dict:
-    return validate_catalog(json.loads(CATALOG.read_text(encoding="utf-8")))
+    return validate_catalog(state_store.load_or_migrate("catalog", CATALOG, {"version": 1, "models": [], "default_model": None}))
 
 
 def save_catalog(cat: dict) -> None:
     validate_catalog(cat)
-    tmp = CATALOG.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(cat, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(CATALOG)
+    state_store.put("catalog", cat)
+    state_store.atomic_json_export(CATALOG, cat, mode=0o600)
 
 
 def model_ids(cat: dict) -> list[str]:

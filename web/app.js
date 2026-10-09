@@ -98,7 +98,7 @@ async function runOptimize() { try {const model=state.selected||state.active;con
 async function runEvaluation() {
   const model=state.selected||state.active;
   if(!model)return flash(t('select_model_eval'),true);
-  const btn=$('#evalBtn'); if(btn)btn.disabled=true;
+  const btn=$('#evalBtn'); if(btn){btn.disabled=true;btn.setAttribute('aria-busy','true');}
   const status=$('#evalStatus'); if(status){status.hidden=false;status.textContent=t('evaluation_prepare');}
   try {
     const d=await api('/api/evaluations',{model,context:Number($('#optCtx').value)||200000,profile:$('#optProfile').value||'balanced',runs:Number($('#evalRuns').value)||3,long_prompt_chars:Number($('#evalLongChars').value)||120000});
@@ -106,7 +106,7 @@ async function runEvaluation() {
     renderEvaluation(result);
     if(status)status.textContent=t('evaluation_complete').replace('{count}', result.results?.length||0);
   } catch(e) { if(status){status.hidden=false;status.textContent=t('evaluation_error').replace('{error}',e.message);} flash(localizedError('evaluation_error', e),true); }
-  finally { if(btn)btn.disabled=false; }
+  finally { if(btn){btn.disabled=false;btn.removeAttribute('aria-busy');} }
 }
 function renderEvaluation(result) {
   const box=$('#evalResults'); if(!box)return;

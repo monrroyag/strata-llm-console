@@ -18,6 +18,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import state_store
+
 BASE = Path(__file__).resolve().parent
 API = os.environ.get("STRATA_CONSOLE_API", "http://127.0.0.1:8090")
 TOKEN = os.environ.get("TELEGRAM_STRATA_BOT_TOKEN", "")
@@ -36,8 +38,8 @@ TEXT = {
 
 
 def _languages():
-    try: return json.loads(LANG_FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError): return {}
+    data = state_store.load_or_migrate("telegram_languages", LANG_FILE, {})
+    return data if isinstance(data, dict) else {}
 
 
 def lang_for(chat_id):
@@ -46,8 +48,9 @@ def lang_for(chat_id):
 
 
 def set_lang(chat_id, lang):
-    data = _languages(); data[str(chat_id)] = lang; LANG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    LANG_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    data = _languages(); data[str(chat_id)] = lang
+    state_store.put("telegram_languages", data)
+    state_store.atomic_json_export(LANG_FILE, data, mode=0o600)
 
 
 def tx(chat_id, key, **kwargs):

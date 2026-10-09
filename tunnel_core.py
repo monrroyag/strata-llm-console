@@ -13,6 +13,8 @@ import time
 import urllib.request
 from pathlib import Path
 
+import state_store
+
 BASE = Path(__file__).resolve().parent
 BIN = BASE / "bin" / "cloudflared"
 STATE = BASE / "data" / "tunnel.json"
@@ -24,18 +26,25 @@ _lock = threading.Lock()
 
 
 def _save(st: dict) -> None:
-    STATE.parent.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps(st, indent=2), encoding="utf-8")
+    if STATE != BASE / "data" / "tunnel.json":
+        STATE.parent.mkdir(parents=True, exist_ok=True)
+        state_store.atomic_json_export(STATE, st, mode=0o600)
+        return
+    state_store.put("tunnel", st)
+    state_store.atomic_json_export(STATE, st, mode=0o600)
 
 
 def _load() -> dict:
-    try:
-        if STATE.exists():
-            data = json.loads(STATE.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
+    if STATE != BASE / "data" / "tunnel.json":
+        try:
+            if STATE.exists():
+                data = json.loads(STATE.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
         return {}
-    return {}
+    data = state_store.load_or_migrate("tunnel", STATE, {})
+    return data if isinstance(data, dict) else {}
 
 
 def ensure_binary() -> str:

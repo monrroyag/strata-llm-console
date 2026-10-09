@@ -6,9 +6,12 @@ El fit check estima si un GGUF cabe en la 3090 + RAM antes de darle alta."""
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
+import threading
 import time
+from collections import deque
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
@@ -17,6 +20,7 @@ HIST.mkdir(parents=True, exist_ok=True)
 
 MAX_ROWS = 5000
 MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+_HISTORY_LOCK = threading.RLock()
 
 
 def _history_path(mid: str) -> Path:
@@ -63,27 +67,46 @@ def record(entry: dict, metrics: dict) -> None:
            "requests": len(metrics.get("requests") or []),
            "setup": _setup_snapshot(entry, {})}
     path = _history_path(entry["id"])
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-    # recorte simple: si pasa el tope, conservar los últimos MAX_ROWS
-    if path.stat().st_size > 8_000_000:
-        lines = path.read_text(encoding="utf-8").splitlines()[-MAX_ROWS:]
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with _HISTORY_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.touch(mode=0o600)
+        path.chmod(0o600)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+            fh.flush()
+        try:
+            oversized = path.stat().st_size > 8_000_000
+        except OSError:
+            oversized = False
+        if oversized:
+            lines = deque(maxlen=MAX_ROWS)
+            with path.open(encoding="utf-8") as fh:
+                lines.extend(fh)
+            tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+            with tmp.open("w", encoding="utf-8") as fh:
+                fh.writelines(lines)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+            path.chmod(0o600)
 
 
 def history(mid: str, since: int = 0, limit: int = 500) -> list[dict]:
     path = _history_path(mid)
     if not path.exists():
         return []
-    rows = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        try:
-            r = json.loads(line)
-        except ValueError:
-            continue
-        if r.get("t", 0) >= since:
-            rows.append(r)
-    return rows[-limit:]
+    with _HISTORY_LOCK:
+        rows = deque(maxlen=max(1, min(int(limit), MAX_ROWS)))
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if r.get("t", 0) >= since:
+                    rows.append(r)
+        return list(rows)
 
 
 def compare_setups(mid: str) -> list[dict]:

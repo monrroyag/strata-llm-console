@@ -8,6 +8,7 @@ import console_core
 import evaluation_core
 import history_core
 import optimize_core
+import state_store
 import tunnel_core
 import update_core
 
@@ -37,7 +38,24 @@ class ConsoleSecurityTests(unittest.TestCase):
         self.assertFalse(result["present"])
         self.assertIn("no instalado", result["error"])
 
-    def test_public_tunnel_status_never_contains_secret(self):
+    def test_runtime_state_migrates_and_commits_atomically(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_db = state_store.DB
+            try:
+                state_store.DB = root / "state.sqlite3"
+                legacy = root / "legacy.json"
+                legacy.write_text(json.dumps({"mode": "local"}), encoding="utf-8")
+                migrated = state_store.load_or_migrate("connection", legacy, {}) or {}
+                self.assertEqual(migrated["mode"], "local")
+                state_store.put("connection", {"mode": "lan", "cors": True})
+                self.assertEqual(state_store.get("connection")["mode"], "lan")
+                state_store.atomic_json_export(legacy, state_store.get("connection"))
+                self.assertEqual(json.loads(legacy.read_text())["cors"], True)
+                self.assertEqual(legacy.stat().st_mode & 0o777, 0o600)
+            finally:
+                state_store.DB = old_db
+
         with tempfile.TemporaryDirectory() as tmp:
             old = tunnel_core.STATE
             try:
