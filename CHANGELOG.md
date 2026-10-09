@@ -2,6 +2,10 @@
 
 All notable changes to Strata LLM Console are documented here.
 
+## 0.3.6 — 2026-10-09
+
+- Validate relative release checksums from the asset directory in CI before publishing.
+
 ## 0.3.5 — 2026-10-09
 
 - Make all published checksum files portable by recording asset basenames instead of build-runner absolute paths.

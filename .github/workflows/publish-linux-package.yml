@@ -43,7 +43,7 @@ jobs:
         run: |
           chmod +x packaging/build-linux-package.sh
           VERSION=ci ./packaging/build-linux-package.sh
-          sha256sum -c dist/*.sha256
+          (cd dist && sha256sum -c *.sha256)
           tar -tzf dist/*.tar.gz | grep -q '/data/params_help.json'
           tar -tzf dist/*.tar.gz | grep -q '/docs/api/openapi.json'
           ! tar -tzf dist/*.tar.gz | grep -E '(^|/)(token|.*\.gguf|traces.jsonl)$'
