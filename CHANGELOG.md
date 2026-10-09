@@ -2,6 +2,10 @@
 
 All notable changes to Strata LLM Console are documented here.
 
+## 0.3.7 — 2026-10-09
+
+- Remove the redundant Docker token-path environment declaration; the runtime derives it from the mounted state directory.
+
 ## 0.3.6 — 2026-10-09
 
 - Validate relative release checksums from the asset directory in CI before publishing.
