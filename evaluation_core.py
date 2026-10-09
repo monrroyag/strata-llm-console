@@ -187,6 +187,8 @@ def run(job_id: str, cat: dict, model_id: str, context: int, profile: str, runs:
     completed = 0
     try:
         for index, candidate in enumerate(candidates):
+            if job_core.is_cancel_requested(job_id):
+                return {"model": entry["id"], "cancelled": True, "results": results}
             _apply_config(path, candidate["config"])
             systemctl("stop", unit_name(entry))
             if entry.get("legacy_unit"):
@@ -198,6 +200,8 @@ def run(job_id: str, cat: dict, model_id: str, context: int, profile: str, runs:
             for kind, target in (("short", short_samples), ("long", long_samples)):
                 prompt = _prompt(kind, long_chars if kind == "long" else 256)
                 for _ in range(runs):
+                    if job_core.is_cancel_requested(job_id):
+                        return {"model": entry["id"], "cancelled": True, "results": results}
                     target.append(_request(entry["port"], entry["id"], prompt))
                     completed += 1
                     job_core.progress(job_id, int(completed / total * 100))
