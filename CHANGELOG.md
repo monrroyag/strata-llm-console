@@ -2,6 +2,10 @@
 
 All notable changes to Strata LLM Console are documented here.
 
+## 0.3.1 — 2026-10-09
+
+- Fix recursive initialization of the persistent Docker runtime volume during image build.
+
 ## 0.3.0 — 2026-10-09
 
 - Add the branded `strata-console` operations CLI over the shared control API.

@@ -19,7 +19,7 @@ COPY docs/api ./docs/api
 COPY data/params_help.json ./data/params_help.json
 RUN mkdir -p logs /var/lib/strata-console/data /var/lib/strata-console/configs \
     && cp catalog.json /var/lib/strata-console/catalog.json \
-    && cp configs/. /var/lib/strata-console/configs/ \
+    && cp -a configs/. /var/lib/strata-console/configs/ \
     && useradd --create-home --uid 10001 strata \
     && chown -R strata:strata /app /var/lib/strata-console
 USER strata
