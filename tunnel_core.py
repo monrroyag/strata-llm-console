@@ -1,13 +1,15 @@
-"""Túnel seguro hacia el gateway 8090: cloudflared quick tunnel (gratuito,
-TLS extremo a extremo, sin abrir puertos en el router). El acceso queda
-protegido por la API key de Strata: sin key configurada el túnel se niega."""
+"""Túnel seguro hacia el gateway 8090: cloudflared quick tunnel.
+
+La autenticación remota pertenece al gateway de la consola: el cliente usa el
+mismo token Bearer/X-Strata-Token que valida el control plane. Este módulo no
+inyecta ni persiste una segunda API key en los modelos.
+"""
 from __future__ import annotations
 
 import hashlib
 import json
 import os
 import re
-import secrets
 import subprocess
 import threading
 import time
@@ -93,7 +95,7 @@ def ensure_binary() -> str:
 
 
 def api_key_set() -> bool:
-    """El gateway sólo debe exponerse si el/los modelos exigen api key."""
+    """Informational legacy flag; tunnel authentication is console-token based."""
     for cfg in CONFIGS.glob("*.json"):
         try:
             if json.loads(cfg.read_text(encoding="utf-8")).get("api_key"):
@@ -113,6 +115,7 @@ def set_api_key_on_models(key: str) -> list[str]:
         if not data.get("api_key"):
             data["api_key"] = key
             cfg.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            cfg.chmod(0o600)
             touched.append(cfg.name)
     return touched
 
@@ -131,7 +134,7 @@ def status(public: bool = False) -> dict:
     st["running"] = running
     st["api_key_set"] = api_key_set()
     if public:
-        return {key: st.get(key) for key in ("running", "url", "started_at", "api_key_set")}
+        return {key: st.get(key) for key in ("running", "url", "started_at", "api_key_set", "auth_mode")}
     return st
 
 
@@ -141,12 +144,10 @@ def start(port: int = 8090, force_key: bool = True) -> dict:
         st = _load()
         if st.get("running") or (_proc and _proc.poll() is None):
             return {"status": "already_running", "url": st.get("url")}
-        generated_key = None
-        if not api_key_set() and force_key:
-            generated_key = secrets.token_urlsafe(32)
-            touched = set_api_key_on_models(generated_key)
-            st["key_files"] = touched
         binary = ensure_binary()
+        # The console gateway is the single authentication boundary. The
+        # legacy force_key argument is retained for API compatibility but no
+        # longer creates a durable model credential before startup.
         LOGF.parent.mkdir(exist_ok=True)
         _proc = subprocess.Popen(
             [binary, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{port}"],
@@ -166,15 +167,11 @@ def start(port: int = 8090, force_key: bool = True) -> dict:
             except OSError:
                 pass
         st["url"] = url
+        st["auth_mode"] = "console_token"
         _save(st)
-        out = {"status": "started" if url else "starting", "url": url, "pid": _proc.pid}
-        if generated_key:
-            out["api_key_generated"] = generated_key
-            out["note"] = ("se generó una API key para los modelos (archivos: "
-                           + ", ".join(st.get("key_files", [])) + "). Los modelos deben "
-                           "reiniciarse para exigirla; el cliente remoto la envía como "
-                           "Authorization: Bearer <key>")
-        return out
+        return {"status": "started" if url else "starting", "url": url, "pid": _proc.pid,
+                "auth_mode": "console_token",
+                "note": "el túnel expone el gateway; los clientes deben usar el token de la consola en Authorization: Bearer o X-Strata-Token"}
 
 
 def stop() -> dict:

@@ -13,7 +13,7 @@ Esta consola es una capa operativa para el [motor oficial de inferencia Strata](
 - **Operar** — registrar, seleccionar, cargar, descargar, detener y quitar modelos del catálogo; editar parámetros; analizar memoria y contexto.
 - **Observar** — revisar VRAM/RAM, rendimiento histórico, trazas, razonamiento expuesto por el motor, herramientas, tokens, latencia y errores.
 - **Conectar** — mantener la API local, activar LAN de forma explícita, configurar Bearer/CORS y usar un túnel cifrado.
-- **Sistema** — consultar la versión de Strata, revisar actualizaciones, detectar backends y personalizar la interfaz.
+- **Sistema** — consultar la versión de Strata, revisar actualizaciones, inspeccionar las capacidades del motor Strata y personalizar la interfaz.
 
 ## API
 

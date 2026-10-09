@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 from console_core import (BASE, CATALOG, CONFIGS, HOST, LOGS, PORT, TOKEN_FILE,
                           MAX_BODY_BYTES, detail_of, get_active, gpu_state, http_json, model_ids, ram_state,
                           save_catalog, slug, status_of, switch_to, validate_model_id, safe_child,
-                          systemctl, unit_name, load_catalog, find)
+                          systemctl, unit_name, load_catalog, find, SYSTEM_SERVICE)
 import history_core
 import tunnel_core
 import update_core
@@ -107,10 +107,17 @@ def parameter_help() -> dict:
 def validate_config_values(req: dict) -> None:
     help_data = parameter_help()
 
-    def validate_one(key: str, value, meta: dict) -> None:
-        if meta.get("type") == "bool" and not isinstance(value, bool):
-            if str(value).lower() not in {"true", "false", "1", "0"}:
+    def validate_one(key: str, value, meta: dict):
+        if meta.get("type") == "bool":
+            if isinstance(value, bool):
+                normalized = value
+            elif isinstance(value, str) and value.lower() in {"true", "false", "1", "0"}:
+                normalized = value.lower() in {"true", "1"}
+            else:
                 raise ValueError(f"{key} debe ser booleano")
+            if key in req:
+                req[key] = normalized
+            value = normalized
         options = meta.get("options")
         if options and value not in options:
             raise ValueError(f"{key} debe ser uno de: {', '.join(map(str, options))}")
@@ -124,6 +131,7 @@ def validate_config_values(req: dict) -> None:
                 raise ValueError(f"{key} fuera de rango [{bounds[0]}, {bounds[1]}]")
         if meta.get("type") in {"path", "secret"} and (not isinstance(value, str) or len(value) > 1024 or "\n" in value or "\r" in value):
             raise ValueError(f"{key} contiene un valor inválido")
+        return value
 
     for key, value in req.items():
         if key == "model":
@@ -138,7 +146,7 @@ def validate_config_values(req: dict) -> None:
                 meta = help_data.get(sampling_key)
                 if not meta or meta.get("flag") != "sampling":
                     raise ValueError(f"parámetro de sampling no permitido: {sampling_key}")
-                validate_one(sampling_key, sampling_value, meta)
+                value[sampling_key] = validate_one(sampling_key, sampling_value, meta)
             continue
         meta = help_data.get(key)
         if not meta:
@@ -230,7 +238,9 @@ def add_model(cat: dict, req: dict) -> dict:
     base_cfg["port"] = port
     base_cfg["tokenizer"] = str(Path(pack) / "tokenizer")
     base_cfg["log"] = str(LOGS / f"{mid}.log")
-    (CONFIGS / cfgname).write_text(json.dumps(base_cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    config_path = CONFIGS / cfgname
+    config_path.write_text(json.dumps(base_cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    config_path.chmod(0o600)
     entry = {"id": mid, "label": req.get("label") or mid, "port": port,
              "config": f"configs/{cfgname}", "pack": pack, "gguf": str(gguf.parent),
              "note": req.get("note", "alta desde la consola")}
@@ -246,19 +256,23 @@ def remove_model(cat: dict, mid: str) -> dict:
     if len(cat.get("models", [])) <= 1:
         raise ValueError("no se puede quitar el último modelo del catálogo")
     systemctl("stop", unit_name(entry))
+    if SYSTEM_SERVICE:
+        systemctl("disable", unit_name(entry))
     if entry.get("legacy_unit"):
         systemctl("stop", entry["legacy_unit"])
     cfg = safe_child(CONFIGS, Path(entry["config"]).name)
     if cfg.exists() and cfg.is_file():
         cfg.unlink()
-    # Solo se elimina el unit generado por la consola; nunca el legacy ni GGUF/pack.
-    generated = Path.home() / ".config" / "systemd" / "user" / f"{unit_name(entry)}.service"
-    if generated.exists():
-        text = generated.read_text(encoding="utf-8", errors="ignore")
-        if "Strata Console" in text:
-            generated.unlink()
-            subprocess.run(["systemctl", "--user", "daemon-reload"], check=False,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # Only user-mode units are generated dynamically. System-mode uses the
+    # root-installed template and the privileged helper for disable/reload.
+    if not SYSTEM_SERVICE:
+        generated = Path.home() / ".config" / "systemd" / "user" / f"{unit_name(entry)}.service"
+        if generated.exists():
+            text = generated.read_text(encoding="utf-8", errors="ignore")
+            if "Strata Console" in text:
+                generated.unlink()
+                subprocess.run(["systemctl", "--user", "daemon-reload"], check=False,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     cat["models"] = [m for m in cat["models"] if m["id"] != mid]
     if cat.get("default_model") == mid:
         cat["default_model"] = cat["models"][0]["id"]
@@ -336,13 +350,22 @@ class Handler(BaseHTTPRequestHandler):
         if evaluation_core.is_blocked():
             return self.send_json(423, {"error": {"code": "EVALUATION_IN_PROGRESS", "message": "el modelo está bloqueado durante la evaluación", "job_id": evaluation_core.active_job()}})
         cat = load_catalog()
-        mid = None
+        payload = {}
         if body:
             try:
-                mid = json.loads(body).get("model")
+                payload = json.loads(body)
             except (ValueError, json.JSONDecodeError):
-                mid = None
-        target = mid if mid in model_ids(cat) else (cat.get("default_model") or get_active())
+                payload = {}
+        requested_model = payload.get("model") if isinstance(payload, dict) else None
+        if "model" in payload:
+            if not isinstance(requested_model, str) or requested_model not in model_ids(cat):
+                return self.send_json(404, {"error": {"type": "model_not_found", "message": "modelo solicitado no existe"}})
+            target = requested_model
+        else:
+            target = cat.get("default_model") or get_active()
+        if not target:
+            return self.send_json(503, {"error": {"type": "model_unavailable", "message": "no hay modelo seleccionado"}})
+        mid = target
         trace_id = None
         if body and path.split("?", 1)[0] in {"/v1/chat/completions", "/v1/messages", "/v1/responses", "/v1/embeddings"}:
             try:
@@ -357,9 +380,19 @@ class Handler(BaseHTTPRequestHandler):
                 trace_core.finish(trace_id, 503, error=str(exc))
             return self.send_json(503, {"error": {"type": "server_error", "message": str(exc)}})
         req = urllib.request.Request(f"http://{HOST}:{port}{path}", data=body, method=self.command)
+        engine_key = None
+        target_entry = find(cat, target)
+        if target_entry:
+            try:
+                engine_cfg = json.loads(safe_child(CONFIGS, Path(target_entry["config"]).name).read_text(encoding="utf-8"))
+                engine_key = engine_cfg.get("api_key")
+            except (OSError, ValueError, TypeError):
+                engine_key = None
         for k, v in self.headers.items():
-            if k.lower() not in {"host", "content-length", "connection"}:
+            if k.lower() not in {"host", "content-length", "connection", "authorization", "x-strata-token"}:
                 req.add_header(k, v)
+        if isinstance(engine_key, str) and engine_key:
+            req.add_header("Authorization", f"Bearer {engine_key}")
         try:
             with urllib.request.urlopen(req, timeout=600) as resp:
                 ctype = resp.headers.get("Content-Type", "")
@@ -437,7 +470,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if p.startswith("/web/"):
             f = (UI / p[5:]).resolve()
-            if not str(f).startswith(str(UI.resolve())) or not f.is_file():
+            if not f.is_relative_to(UI.resolve()) or not f.is_file():
                 self.send_error(404)
                 return
             data = f.read_bytes()
@@ -749,7 +782,9 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["args"] = a
                 bak = path.with_suffix(".json.bak")
                 bak.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+                bak.chmod(0o600)
                 path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                path.chmod(0o600)
                 self.send_json(200, {"status": "saved", "file": str(path), "backup": str(bak),
                                      "note": "se aplica al reiniciar el modelo"})
             elif p == "/api/default":
@@ -782,6 +817,8 @@ class Handler(BaseHTTPRequestHandler):
                                                            str(req.get("kv", "q4_0"))))
             else:
                 self.send_error(404)
+        except job_core.IdempotencyConflict as exc:
+            self.send_json(409, {"error": {"code": "IDEMPOTENCY_CONFLICT", "message": str(exc)}})
         except KeyError as exc:
             self.send_json(400, {"error": {"message": f"falta el campo {exc}"}})
         except ValueError as exc:

@@ -37,6 +37,7 @@ MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
 SYSTEM_SERVICE = os.environ.get("STRATA_CONSOLE_SYSTEM_SERVICE", "0") == "1"
+SYSTEM_HELPER = os.environ.get("STRATA_CONSOLE_SYSTEM_HELPER", "/usr/lib/strata-llm-console/systemd_helper.py")
 
 lock = threading.Lock()
 try:
@@ -112,6 +113,8 @@ def safe_child(base: Path, relative: str) -> Path:
 
 def unit_name(entry: dict) -> str:
     mid = validate_model_id(entry["id"])
+    if SYSTEM_SERVICE:
+        return f"strata-console-model@{mid}.service"
     return entry.get("unit") or f"strata-console-{slug(mid)}"
 
 
@@ -132,9 +135,13 @@ def ready(port: int, mid: str) -> bool:
 
 
 def systemctl(action: str, unit: str) -> bool:
-    command = ["systemctl"] if SYSTEM_SERVICE else ["systemctl", "--user"]
-    result = subprocess.run(command + [action, unit], check=False,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if SYSTEM_SERVICE:
+        if not unit.startswith("strata-console-model@"):
+            return False
+        command = ["sudo", "-n", "/usr/bin/python3", SYSTEM_HELPER, "model", action, unit.removeprefix("strata-console-model@").removesuffix(".service")]
+    else:
+        command = ["systemctl", "--user", action, unit]
+    result = subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return result.returncode == 0
 
 
@@ -148,7 +155,9 @@ def _systemd_quote(value: str) -> str:
 def ensure_unit(entry: dict, cat: dict) -> str:
     """Create a native systemd unit without invoking a shell."""
     unit = unit_name(entry)
-    unit_root = Path("/etc/systemd/system") if SYSTEM_SERVICE else Path.home() / ".config" / "systemd" / "user"
+    if SYSTEM_SERVICE:
+        return unit
+    unit_root = Path.home() / ".config" / "systemd" / "user"
     path = unit_root / f"{unit}.service"
     if path.exists():
         return unit

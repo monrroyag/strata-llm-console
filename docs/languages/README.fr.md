@@ -13,7 +13,7 @@ Cette console est une couche opérationnelle pour le [moteur officiel d’infér
 - **Opérer** — enregistrer, sélectionner, charger, décharger, arrêter et retirer les modèles; modifier les paramètres; analyser la mémoire et le contexte.
 - **Observer** — consulter la VRAM/RAM, les performances historiques, les traces, le raisonnement émis par le moteur, les outils, les tokens, la latence et les erreurs.
 - **Connecter** — conserver l’API en local, activer le LAN explicitement, configurer Bearer/CORS et utiliser un tunnel chiffré.
-- **Système** — vérifier la version de Strata, rechercher les mises à jour, détecter les backends et personnaliser l’interface.
+- **Système** — vérifier la version de Strata, rechercher les mises à jour, inspecter les capacités du moteur Strata et personnaliser l’interface.
 
 ## API
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "strata-llm-console"
-version = "0.3.3"
+version = "0.3.4"
 description = "Local Strata control plane, gateway and operations CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,7 +17,16 @@ strata-console = "cli:main"
 [tool.setuptools]
 py-modules = [
   "backend_core", "cli", "connection_core", "console_core", "console_server",
-  "evaluation_core", "history_core", "job_core", "optimize_core", "runtime_drivers",
-  "state_store", "telegram_control_bot", "trace_core", "tunnel_core", "update_core",
-  "update_monitor"
+  "evaluation_core", "history_core", "job_core", "model_runner", "optimize_core",
+  "runtime_drivers", "state_store", "systemd_helper", "telegram_control_bot",
+  "trace_core", "tunnel_core", "update_core", "update_monitor", "paths"
 ]
+
+[tool.setuptools.data-files]
+"strata-llm-console" = ["catalog.json", "VERSION", "LICENSE", "README.md", "CHANGELOG.md", "requirements.txt"]
+"strata-llm-console/web" = ["web/index.html", "web/app.js", "web/app.css", "web/i18n.js"]
+"strata-llm-console/configs" = ["configs/coder.json", "configs/iq3_s.json", "configs/iq3_xxs.json"]
+"strata-llm-console/schemas" = ["schemas/catalog.schema.json"]
+"strata-llm-console/data" = ["data/params_help.json"]
+"strata-llm-console/docs/api" = ["docs/api/openapi.json"]
+"strata-llm-console/docs/languages" = ["docs/languages/README.de.md", "docs/languages/README.en.md", "docs/languages/README.es.md", "docs/languages/README.fr.md", "docs/languages/README.pt.md"]

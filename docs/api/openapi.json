@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Strata LLM Console API",
-    "version": "0.3.3",
+    "version": "0.3.4",
     "description": "Authenticated control plane and OpenAI-compatible gateway for local inference."
   },
   "servers": [

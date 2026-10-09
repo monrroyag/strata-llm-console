@@ -15,11 +15,14 @@ PKGROOT="$STAGE/root"
 APP="$PKGROOT/opt/strata-llm-console"
 DEBIAN="$PKGROOT/DEBIAN"
 mkdir -p "$DEBIAN" "$APP/data" "$APP/docs" "$APP/configs" "$APP/schemas" "$APP/web" \
-  "$PKGROOT/lib/systemd/system" "$PKGROOT/usr/bin"
+  "$PKGROOT/lib/systemd/system" "$PKGROOT/usr/bin" "$PKGROOT/usr/lib/strata-llm-console" "$PKGROOT/etc/sudoers.d"
 cd "$ROOT"
 cp backend_core.py connection_core.py console_core.py console_server.py history_core.py job_core.py evaluation_core.py \
    optimize_core.py state_store.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py update_monitor.py cli.py runtime_drivers.py paths.py \
    catalog.json .gitignore README.md LICENSE VERSION CHANGELOG.md requirements.txt pyproject.toml telegram-control.env.example telegram-control.service.example "$APP/"
+cp model_runner.py "$APP/model_runner.py"
+cp systemd_helper.py "$PKGROOT/usr/lib/strata-llm-console/systemd_helper.py"
+chmod 0755 "$PKGROOT/usr/lib/strata-llm-console/systemd_helper.py"
 cp -r configs/. "$APP/configs/"
 cp -r schemas/. "$APP/schemas/"
 cp -r web/. "$APP/web/"
@@ -32,7 +35,7 @@ Version: $VERSION
 Section: net
 Priority: optional
 Architecture: amd64
-Depends: python3 (>= 3.10), ca-certificates, git
+Depends: python3 (>= 3.10), ca-certificates, git, sudo
 Maintainer: monrroyag <monrroyag@users.noreply.github.com>
 Description: Strata LLM Console control plane
  Local control plane and OpenAI-compatible gateway for the Strata inference engine.
@@ -55,10 +58,12 @@ Environment=STRATA_CONSOLE_TOKEN_FILE=/var/lib/strata-llm-console/token
 Environment=STRATA_CONSOLE_SYSTEM_SERVICE=1
 Environment=STRATA_CONSOLE_HOST=127.0.0.1
 Environment=STRATA_CONSOLE_PORT=8090
+# sudoers permits only the narrow helper; the helper performs controlled
+# system-unit operations without exposing a general root shell.
+NoNewPrivileges=false
 ExecStart=/usr/bin/python3 /opt/strata-llm-console/console_server.py
 Restart=on-failure
 RestartSec=3
-NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
@@ -68,9 +73,41 @@ ReadWritePaths=/var/lib/strata-llm-console /var/log/strata-llm-console /etc/syst
 WantedBy=multi-user.target
 EOF
 
+cat > "$PKGROOT/lib/systemd/system/strata-console-model@.service" <<'EOF'
+[Unit]
+Description=Strata model %i (Strata LLM Console)
+After=strata-llm-console.service network-online.target
+
+[Service]
+Type=simple
+User=strata-console
+Group=strata-console
+WorkingDirectory=/opt/strata-llm-console
+Environment=STRATA_CONSOLE_STATE_DIR=/var/lib/strata-llm-console
+Environment=STRATA_CONSOLE_TOKEN_FILE=/var/lib/strata-llm-console/token
+ExecStart=/usr/bin/python3 /opt/strata-llm-console/model_runner.py %i
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/strata-llm-console /var/log/strata-llm-console
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > "$PKGROOT/etc/sudoers.d/strata-llm-console" <<'EOF'
+strata-console ALL=(root) NOPASSWD: /usr/bin/python3 /usr/lib/strata-llm-console/systemd_helper.py *
+EOF
+chmod 0440 "$PKGROOT/etc/sudoers.d/strata-llm-console"
+
 cat > "$PKGROOT/usr/bin/strata-console" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+export STRATA_CONSOLE_STATE_DIR=/var/lib/strata-llm-console
+export STRATA_CONSOLE_TOKEN_FILE=/var/lib/strata-llm-console/token
 cd /opt/strata-llm-console
 exec /usr/bin/python3 cli.py "$@"
 EOF
@@ -79,6 +116,8 @@ chmod 0755 "$PKGROOT/usr/bin/strata-console"
 cat > "$PKGROOT/usr/bin/strata-llm-console" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+export STRATA_CONSOLE_STATE_DIR=/var/lib/strata-llm-console
+export STRATA_CONSOLE_TOKEN_FILE=/var/lib/strata-llm-console/token
 cd /opt/strata-llm-console
 if [ "${1:-}" = "serve" ]; then shift; fi
 exec /usr/bin/python3 console_server.py "$@"
@@ -110,7 +149,11 @@ if [ ! -e "$STATE/data/params_help.json" ] && [ -f "$APP/data/params_help.json" 
 # execute upstream code or access the network as root. Use the Update panel/CLI action.
 chown -R "$USER_NAME:$GROUP_NAME" "$STATE" "$LOG"
 chmod 0750 "$STATE" "$STATE/data" "$STATE/configs" "$STATE/logs" "$LOG"
+find "$STATE" -type f \( -name '*.json' -o -name '*.sqlite3' -o -name '*.bak' -o -name '*.jsonl' -o -name '*.db-wal' -o -name '*.db-shm' \) -exec chmod 0600 {} +
 [ -e "$STATE/catalog.json" ] && chmod 0600 "$STATE/catalog.json" || true
+if command -v visudo >/dev/null 2>&1; then
+  visudo -cf /etc/sudoers.d/strata-llm-console >/dev/null
+fi
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl enable --now strata-llm-console.service >/dev/null 2>&1 || true

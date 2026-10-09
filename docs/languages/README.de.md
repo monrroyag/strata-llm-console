@@ -13,7 +13,7 @@ Diese Konsole ist eine Betriebsschicht für die [offizielle Strata-Inferenz-Engi
 - **Bedienen** — Modelle registrieren, auswählen, laden, entladen, stoppen und aus dem Katalog entfernen; Parameter ändern; Speicher und Kontext analysieren.
 - **Beobachten** — VRAM/RAM, historische Leistung, Traces, von der Engine ausgegebenes Reasoning, Tools, Token, Latenz und Fehler prüfen.
 - **Verbinden** — API lokal halten, LAN ausdrücklich aktivieren, Bearer/CORS konfigurieren und einen verschlüsselten Tunnel verwenden.
-- **System** — Strata-Version prüfen, Updates suchen, Backends erkennen und die Oberfläche anpassen.
+- **System** — die installierte Strata-Version prüfen, Updates vergleichen, die Fähigkeiten der Strata-Engine prüfen und die UI anpassen.
 
 ## API
 

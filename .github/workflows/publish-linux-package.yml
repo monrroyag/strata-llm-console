@@ -46,7 +46,13 @@ jobs:
           sha256sum -c dist/*.sha256
           tar -tzf dist/*.tar.gz | grep -q '/data/params_help.json'
           tar -tzf dist/*.tar.gz | grep -q '/docs/api/openapi.json'
-          ! tar -tzf dist/*.tar.gz | grep -E '(^|/)(token|.*\.gguf|traces\.jsonl)$'
+          ! tar -tzf dist/*.tar.gz | grep -E '(^|/)(token|.*\.gguf|traces.jsonl)$'
+      - name: Build and smoke-test wheel assets
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist-wheel
+          python -m venv /tmp/strata-wheel-ci
+          /tmp/strata-wheel-ci/bin/pip install --no-deps dist-wheel/*.whl
+          (cd /tmp && /tmp/strata-wheel-ci/bin/python -c 'import console_server; assert console_server.UI.joinpath("index.html").is_file(); assert console_server.OPENAPI.is_file(); assert console_server.PARAMS_HELP.is_file(); print("wheel_assets=OK")')
 
   linux-bundle:
     if: startsWith(github.ref, 'refs/tags/v')

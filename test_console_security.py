@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import console_core
+import console_server
 import evaluation_core
 import history_core
 import optimize_core
@@ -38,6 +39,14 @@ class ConsoleSecurityTests(unittest.TestCase):
         self.assertFalse(result["present"])
         self.assertTrue(result["install_required"])
         self.assertIn("no instalado", result["error"])
+
+    def test_existing_engine_checkout_must_point_to_official_origin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "engine"
+            (root / ".git").mkdir(parents=True)
+            with patch.object(update_core, "_git", return_value="https://github.com/example/not-strata.git"):
+                with self.assertRaises(ValueError):
+                    update_core.ensure_engine({"engine_root": str(root)})
 
     def test_runtime_state_migrates_and_commits_atomically(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -94,6 +103,33 @@ class ConsoleSecurityTests(unittest.TestCase):
         contract = json.loads((root / "docs" / "api" / "openapi.json").read_text())
         self.assertEqual(contract["openapi"], "3.0.3")
         self.assertIn("/api/status", contract["paths"])
+    def test_boolean_config_strings_are_normalized(self):
+        request = {"model": "demo", "vision": "false", "lazy_load": "true"}
+        console_server.validate_config_values(request)
+        self.assertIs(request["vision"], False)
+        self.assertIs(request["lazy_load"], True)
+
+    def test_job_idempotency_replays_terminal_result_and_rejects_payload_reuse(self):
+        import job_core
+        with tempfile.TemporaryDirectory() as tmp:
+            old_db = job_core.DB
+            try:
+                job_core.DB = Path(tmp) / "jobs.sqlite3"
+                job_core.init()
+                first = job_core.submit("test", {"x": 1}, lambda _job: {"ok": True}, "same-key")
+                for _ in range(50):
+                    current = job_core.get(first["id"])
+                    if current["status"] == "succeeded":
+                        break
+                    import time
+                    time.sleep(0.01)
+                replay = job_core.submit("test", {"x": 1}, lambda _job: {"ok": False}, "same-key")
+                self.assertEqual(replay["id"], first["id"])
+                self.assertEqual(replay["result"], {"ok": True})
+                with self.assertRaises(job_core.IdempotencyConflict):
+                    job_core.submit("test", {"x": 2}, lambda _job: {}, "same-key")
+            finally:
+                job_core.DB = old_db
 
 
 if __name__ == "__main__":

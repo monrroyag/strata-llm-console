@@ -37,16 +37,34 @@ def validate_repo_url(repo: str) -> str:
     return OFFICIAL_REPO
 
 
+def _official_remote(root: Path) -> str:
+    """Validate the checkout's actual origin, not a catalog-provided claim."""
+    remote = _git(str(root), "config", "--get", "remote.origin.url")
+    normalized = remote.strip().rstrip("/")
+    if normalized.endswith(".git"):
+        normalized = normalized[:-4]
+    allowed = {"https://github.com/Niko1221/Strata",
+               "git@github.com:Niko1221/Strata", "ssh://git@github.com/Niko1221/Strata"}
+    if normalized not in allowed:
+        raise ValueError("el checkout no apunta al repositorio oficial de Strata")
+    return OFFICIAL_REPO
+
+
 def ensure_engine(cat: dict) -> dict:
     """Detect the official checkout and clone it only when no valid checkout exists."""
     root = _engine_root(cat)
     if root.is_dir() and (root / ".git").exists():
+        repo = _official_remote(root)
+        branch = _git(str(root), "symbolic-ref", "--short", "-q", "HEAD") or "detached"
+        if branch not in {"main", "detached"}:
+            raise ValueError(f"checkout de Strata en rama no autorizada: {branch}")
         normalized = str(root)
-        if cat.get("engine_root") != normalized:
+        if cat.get("engine_root") != normalized or cat.get("update", {}).get("repo_url") != repo:
             cat["engine_root"] = normalized
-            cat.setdefault("update", {})["repo_url"] = validate_repo_url(cat.get("update", {}).get("repo_url") or OFFICIAL_REPO)
+            cat.setdefault("update", {})["repo_url"] = repo
             _save_catalog(cat)
         return {"present": True, "installed": False, "root": normalized,
+                "repo_url": repo, "branch": branch,
                 "setup_script": (root / "setup.sh").is_file(),
                 "runtime_ready": (root / ".venv" / "bin" / "python").is_file()}
     repo = validate_repo_url(cat.get("update", {}).get("repo_url") or OFFICIAL_REPO)
@@ -96,10 +114,18 @@ def check_update(cat: dict, fetch: bool = True) -> dict:
                 "install_required": True, "repo_url": OFFICIAL_REPO,
                 "error": "engine no instalado; se puede instalar desde el repositorio oficial",
                 "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+    try:
+        actual_repo = _official_remote(root_path)
+        branch = _git(str(root_path), "symbolic-ref", "--short", "-q", "HEAD") or "detached"
+        if branch not in {"main", "detached"}:
+            raise ValueError(f"checkout de Strata en rama no autorizada: {branch}")
+    except (OSError, RuntimeError, ValueError) as exc:
+        return {"present": False, "installed": True, "update_available": False,
+                "repo_url": None, "error": f"checkout no autorizado: {exc}",
+                "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     root = str(root_path)
-    info = {"repo_url": validate_repo_url(cat.get("update", {}).get("repo_url") or
-                                              _git(root, "config", "--get", "remote.origin.url")),
-            "branch": "main", "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    info = {"repo_url": actual_repo,
+            "branch": branch, "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "installed": True, "local_version": engine_version(root),
             "setup_script": (root_path / "setup.sh").is_file(),
             "runtime_ready": (root_path / ".venv" / "bin" / "python").is_file()}

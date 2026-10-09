@@ -2,6 +2,15 @@
 
 All notable changes to Strata LLM Console are documented here.
 
+## 0.3.4 — 2026-10-09
+
+- Add a Debian-safe systemd model template and a narrow sudo-authorized helper instead of unprivileged writes to `/etc/systemd/system`.
+- Propagate Debian and portable runtime/token paths through all CLI and server wrappers.
+- Protect jobs SQLite sidecars, model configs and backups with mode `0600`.
+- Make the gateway the single external tunnel authentication boundary and forward only configured engine credentials upstream.
+- Reject unknown requested models, harden static-file containment, validate the official Strata checkout, normalize boolean configuration values and make job idempotency replay terminal results.
+- Package the complete panel/assets in `pip install .` wheels and default wheel state to the user state directory.
+
 ## 0.3.3 — 2026-10-09
 
 - Align the Debian asset filename with its `amd64` package architecture.
@@ -20,7 +29,7 @@ All notable changes to Strata LLM Console are documented here.
 - Add a local chat workspace with streaming, reasoning visibility, effort controls, themes, local persistence and Markdown export.
 - Generate and validate the OpenAPI contract in CI.
 - Add HTTP surface tests, gateway rate limiting, bounded upstream responses and graceful SIGTERM shutdown.
-- Add capability-based runtime drivers for Strata, Ollama and vLLM.
+- Add capability-based Strata engine discovery without starting processes.
 - Validate model configuration ranges and add Telegram update idempotency/rate limiting.
 - Make Docker and Debian runtime state explicit and persistent without installation-directory symlinks.
 - Prevent package hooks from cloning or executing upstream engine code; engine installation is an explicit operator action.

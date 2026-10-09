@@ -73,6 +73,8 @@ fi
 cat > "$BIN_DIR/strata-console" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+export STRATA_CONSOLE_STATE_DIR="$STATE_ROOT"
+export STRATA_CONSOLE_TOKEN_FILE="$STATE_ROOT/token"
 cd "$INSTALL_ROOT"
 exec python3 cli.py "\$@"
 EOF
@@ -81,6 +83,8 @@ chmod 0755 "$BIN_DIR/strata-console"
 cat > "$BIN_DIR/strata-llm-console" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+export STRATA_CONSOLE_STATE_DIR="$STATE_ROOT"
+export STRATA_CONSOLE_TOKEN_FILE="$STATE_ROOT/token"
 cd "$INSTALL_ROOT"
 if [[ "\${1:-}" == serve ]]; then shift; fi
 exec python3 console_server.py "\$@"

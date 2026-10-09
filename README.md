@@ -134,14 +134,14 @@ STRATA_CONSOLE_HOME="$HOME/.local/share/strata-console-test" \
   bash install-linux.sh v0.1.0
 ```
 
-The package contains the console only. Strata engine binaries, GGUF files, model packs and token files stay outside the release artifact. Use `systemctl --user status strata-llm-console` after installation. The default panel is `http://127.0.0.1:8090`.
+The Debian package installs a systemd template for model units and a narrow root-owned helper authorized only through `sudoers` for `start/restart/stop/enable/disable` of validated `strata-console-model@<id>.service` names. The HTTP server never writes `/etc/systemd/system`, and both the console and model units run as `strata-console`. The package wrappers export `STRATA_CONSOLE_STATE_DIR=/var/lib/strata-llm-console` and `STRATA_CONSOLE_TOKEN_FILE=/var/lib/strata-llm-console/token`, so the installed CLI uses the same authenticated state as the service. The tunnel uses the console token as its single external authentication boundary; it does not generate or persist a second model key. Strata engine binaries, GGUF files and model packs stay outside the release artifact. The default panel is `http://127.0.0.1:8090`.
 
 ### Debian/Ubuntu quick install
 
 Each tagged release also includes a native `.deb` package. It installs the console under `/opt/strata-llm-console`, keeps runtime state under `/var/lib/strata-llm-console`, creates a hardened system service and preserves state across package upgrades:
 
 ```bash
-VERSION=v0.3.3
+VERSION=v0.3.4
 curl -fL -o /tmp/strata-llm-console.deb \
   "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_amd64.deb"
 curl -fL -o /tmp/strata-llm-console.deb.sha256 \
@@ -169,6 +169,15 @@ strata-console chat --model model-id --message "Hello"
 ```
 
 Every command accepts `--json`, `--url` and `--token`. The token can be supplied with `STRATA_CONSOLE_TOKEN`; the CLI also reads the local runtime token without printing it. `strata-console serve` starts the server when systemd is not used.
+
+### Python wheel
+
+`pip install .` is supported for development and user-scoped environments. The wheel includes the panel, model config templates, schemas, parameter help and OpenAPI contract; installed runtime state defaults to `~/.local/state/strata-llm-console` unless `STRATA_CONSOLE_STATE_DIR` is set. The wheel does not install Strata or systemd units.
+
+```bash
+python3 -m pip install .
+strata-console doctor --json
+```
 
 ### Environment variables
 

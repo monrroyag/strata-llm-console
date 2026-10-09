@@ -13,7 +13,7 @@ Esta consola é uma camada operacional para o [motor oficial de inferência Stra
 - **Operar** — cadastrar, selecionar, carregar, descarregar, parar e remover modelos do catálogo; editar parâmetros; analisar memória e contexto.
 - **Observar** — consultar VRAM/RAM, desempenho histórico, rastreamentos, raciocínio emitido pelo motor, ferramentas, tokens, latência e erros.
 - **Conectar** — manter a API local, ativar LAN explicitamente, configurar Bearer/CORS e usar túnel criptografado.
-- **Sistema** — verificar a versão do Strata, procurar atualizações, detectar backends e personalizar a interface.
+- **Sistema** — verificar a versão do Strata, procurar atualizações, inspecionar os recursos do motor Strata e personalizar a interface.
 
 ## API
 

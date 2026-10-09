@@ -18,6 +18,7 @@ BASE = CODE_ROOT
 SYSTEM_SERVICE = os.environ.get("STRATA_CONSOLE_SYSTEM_SERVICE", "0") == "1"
 STATE = runtime_path("data", "connection.json")
 DEFAULT_SERVICE = os.environ.get("STRATA_CONSOLE_SERVICE", "strata-llm-console.service")
+SYSTEM_HELPER = os.environ.get("STRATA_CONSOLE_SYSTEM_HELPER", "/usr/lib/strata-llm-console/systemd_helper.py")
 
 
 def service_name() -> str:
@@ -91,18 +92,24 @@ def apply(mode, cors=False):
     if mode not in ("local", "lan"):
         raise ValueError("mode debe ser local o lan")
     host = "127.0.0.1" if mode == "local" else "0.0.0.0"
-    UNIT_DIR.mkdir(parents=True, exist_ok=True)
-    OVERRIDE.write_text(
-        "[Service]\n"
-        f"Environment=STRATA_CONSOLE_HOST={host}\n"
-        "Environment=STRATA_CONSOLE_PORT=8090\n",
-        encoding="utf-8",
-    )
+    if SYSTEM_SERVICE:
+        result = subprocess.run(["sudo", "-n", "/usr/bin/python3", SYSTEM_HELPER, "connection", mode], check=False,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode != 0:
+            raise PermissionError("no se pudo aplicar el drop-in systemd con el helper privilegiado")
+    else:
+        UNIT_DIR.mkdir(parents=True, exist_ok=True)
+        OVERRIDE.write_text(
+            "[Service]\n"
+            f"Environment=STRATA_CONSOLE_HOST={host}\n"
+            "Environment=STRATA_CONSOLE_PORT=8090\n",
+            encoding="utf-8",
+        )
     data = {"mode": mode, "cors": bool(cors)}
     _save(data)
-    command = ["systemctl"] if SYSTEM_SERVICE else ["systemctl", "--user"]
-    subprocess.run(command + ["daemon-reload"], check=False,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not SYSTEM_SERVICE:
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return {"status": "saved", "mode": mode, "cors": bool(cors),
             "service": service_name(),
             "restart_required": True,

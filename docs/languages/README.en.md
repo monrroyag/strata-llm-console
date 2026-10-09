@@ -13,7 +13,7 @@ This console is an operational layer for the [official Strata inference engine](
 - **Operate** — register, select, load, unload, stop and remove catalog entries; edit model parameters; analyze context and memory fit.
 - **Observe** — inspect GPU/RAM metrics, historical performance, request traces, exposed reasoning, tool calls, token usage, latency and errors.
 - **Connect** — keep the API on localhost, explicitly enable LAN access, configure Bearer authentication/CORS and start an encrypted tunnel.
-- **System** — check the installed Strata version, compare upstream updates, detect compatible backends and configure UI preferences.
+- **System** — check the installed Strata version, compare upstream updates, inspect Strata engine capabilities and configure UI preferences.
 
 ## API
 
@@ -59,7 +59,7 @@ The installer verifies SHA-256, installs under `~/.local/share/strata-llm-consol
 For Debian/Ubuntu with systemd, the same release also provides a native package:
 
 ```bash
-VERSION=v0.3.3
+VERSION=v0.3.4
 curl -fL -o /tmp/strata-llm-console.deb \
   "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_amd64.deb"
 sudo apt install /tmp/strata-llm-console.deb

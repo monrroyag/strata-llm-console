@@ -22,9 +22,24 @@ _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="strata-job")
 def _connect():
     DB.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB, timeout=10)
+    try:
+        DB.chmod(0o600)
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(str(DB) + suffix)
+            if sidecar.exists():
+                sidecar.chmod(0o600)
+    except OSError:
+        pass
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=10000")
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(str(DB) + suffix)
+        if sidecar.exists():
+            try:
+                sidecar.chmod(0o600)
+            except OSError:
+                pass
     return con
 
 
@@ -58,6 +73,10 @@ def init():
 
 
 init()
+
+
+class IdempotencyConflict(ValueError):
+    """Same idempotency key was reused with a different operation payload."""
 
 
 def _row(row):
@@ -127,8 +146,11 @@ def submit(kind: str, payload: dict, fn: Callable[[str], object], idempotency_ke
     with _LOCK:
         if idempotency_key:
             with _db() as con:
-                existing = con.execute("SELECT * FROM jobs WHERE idempotency_key=? AND status IN ('queued','running')", (idempotency_key,)).fetchone()
+                existing = con.execute("SELECT * FROM jobs WHERE idempotency_key=?", (idempotency_key,)).fetchone()
                 if existing:
+                    existing_payload = json.loads(existing["payload"])
+                    if existing["kind"] != kind or existing_payload != payload:
+                        raise IdempotencyConflict("Idempotency-Key ya fue usada con otro payload")
                     return _row(existing)
         job_id = "job_" + uuid.uuid4().hex[:20]
         with _db() as con:

@@ -79,12 +79,21 @@ class HttpSurfaceTests(unittest.TestCase):
         self.assertTrue(dict(headers).get("Retry-After"))
         self.assertEqual(json.loads(body)["error"]["type"], "rate_limit_error")
 
+    def test_unknown_requested_model_is_not_silently_defaulted(self):
+        status, _, body = self.request(
+            "POST", "/v1/chat/completions",
+            {"model": "does-not-exist", "messages": [{"role": "user", "content": "hi"}]},
+        )
+        self.assertEqual(status, 404)
+        self.assertEqual(json.loads(body)["error"]["type"], "model_not_found")
+
     def test_sse_is_forwarded_chunked(self):
         upstream_port = self.upstream.server_address[1]
-        with patch.object(console_server, "switch_to", return_value=upstream_port):
+        with patch.object(console_server, "switch_to", return_value=upstream_port), \
+             patch.object(console_server, "load_catalog", return_value={"models": [{"id": "demo", "port": upstream_port, "config": "configs/iq3_s.json"}], "default_model": "demo"}):
             status, headers, body = self.request(
                 "POST", "/v1/chat/completions",
-                {"model": "demo", "stream": True, "messages": [{"role": "user", "content": "hi"}]},
+                {"stream": True, "messages": [{"role": "user", "content": "hi"}]},
             )
         self.assertEqual(status, 200)
         self.assertEqual(dict(headers).get("Transfer-Encoding"), "chunked")
