@@ -6,7 +6,7 @@ RAW_VERSION=${1:-${VERSION:-0.0.0}}
 VERSION=${RAW_VERSION#v}
 [[ "$VERSION" != "dev" ]] || VERSION="0.0.0~dev"
 OUT=${OUT:-"$ROOT/dist"}
-PKG="strata-llm-console_${VERSION}_all.deb"
+PKG="strata-llm-console_${VERSION}_amd64.deb"
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 

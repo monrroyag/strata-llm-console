@@ -2,6 +2,10 @@
 
 All notable changes to Strata LLM Console are documented here.
 
+## 0.3.3 — 2026-10-09
+
+- Align the Debian asset filename with its `amd64` package architecture.
+
 ## 0.3.2 — 2026-10-09
 
 - Derive the container token path from `STRATA_CONSOLE_STATE_DIR` without declaring a token-like Docker environment variable.

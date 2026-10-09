@@ -141,11 +141,11 @@ The package contains the console only. Strata engine binaries, GGUF files, model
 Each tagged release also includes a native `.deb` package. It installs the console under `/opt/strata-llm-console`, keeps runtime state under `/var/lib/strata-llm-console`, creates a hardened system service and preserves state across package upgrades:
 
 ```bash
-VERSION=v0.3.2
+VERSION=v0.3.3
 curl -fL -o /tmp/strata-llm-console.deb \
-  "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_all.deb"
+  "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_amd64.deb"
 curl -fL -o /tmp/strata-llm-console.deb.sha256 \
-  "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_all.deb.sha256"
+  "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_amd64.deb.sha256"
 (cd /tmp && sha256sum -c strata-llm-console.deb.sha256)
 sudo apt install /tmp/strata-llm-console.deb
 sudo systemctl status strata-llm-console --no-pager
