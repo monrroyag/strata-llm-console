@@ -32,17 +32,17 @@ El bot con lista permitida controla estado, selección de modelos, detención, d
 
 ## Capturas
 
-![Navegación agrupada](../screenshots/models-grouped-en-final2.png)
-![Rendimiento](../screenshots/performance.png)
-![Trazas](../screenshots/traces-errors.png)
-![Conexión](../screenshots/connection-final.png)
-![Preferencias](../screenshots/preferences-latest.png)
-![Parámetros](../screenshots/parameters.png)
-![Optimizador](../screenshots/optimizer-analysis.png)
-![Actualizaciones](../screenshots/update.png)
-![Túnel](../screenshots/tunnel.png)
-![Alta de modelo](../screenshots/add.png)
-![Actividad](../screenshots/activity.png)
+![Navegación agrupada](../screenshots/en/01-models.png)
+![Rendimiento](../screenshots/en/02-performance.png)
+![Trazas](../screenshots/en/03-traces.png)
+![Conexión](../screenshots/en/04-connection.png)
+![Preferencias](../screenshots/en/05-preferences.png)
+![Parámetros](../screenshots/en/06-parameters.png)
+![Optimizador](../screenshots/en/07-optimizer-evaluation.png)
+![Actualizaciones](../screenshots/en/08-updates.png)
+![Túnel](../screenshots/en/09-tunnel.png)
+![Alta de modelo](../screenshots/en/10-registration.png)
+![Actividad](../screenshots/en/11-activity.png)
 
 ## Instalación en Linux
 

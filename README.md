@@ -28,7 +28,7 @@ The gateway is OpenAI-compatible:
 http://127.0.0.1:8090/v1
 ```
 
-The control API is local by default and uses `X-Strata-Token` or `Authorization: Bearer`.
+The control API is local by default and uses `X-Strata-Token` or `Authorization: Bearer <console-token>`.
 
 Important endpoints:
 
@@ -178,52 +178,55 @@ English is the default language for a new installation. The selected locale is p
 - `docs/languages/` — documentation for every supported locale.
 - `docs/screenshots/` — representative UI captures.
 
-## Screenshots
+## English screenshot gallery
 
-### English grouped navigation
+The ordered English gallery lives in [`docs/screenshots/en/`](docs/screenshots/en/README.md). Each image has a numbered role and an explanation of what the operator should inspect.
 
-![Grouped English navigation](docs/screenshots/models-grouped-en-final2.png)
+### 01 — Model inventory and grouped navigation
 
-### Performance and hardware metrics
+![Model inventory and grouped navigation](docs/screenshots/en/01-models.png)
 
-![Performance](docs/screenshots/performance.png)
+### 02 — Performance
 
-### Request traces and errors
+![Performance](docs/screenshots/en/02-performance.png)
 
-![Trace errors](docs/screenshots/traces-errors.png)
+### 03 — Request traces
 
-### Local and LAN connection
+![Request traces](docs/screenshots/en/03-traces.png)
 
-![Connection](docs/screenshots/connection-final.png)
+### 04 — Connection and exposure
 
-### Preferences and personalization
+![Connection](docs/screenshots/en/04-connection.png)
 
-![Preferences](docs/screenshots/preferences-latest.png)
+### 05 — Preferences
 
-### Model parameters
+![Preferences](docs/screenshots/en/05-preferences.png)
 
-![Parameters](docs/screenshots/parameters.png)
+### 06 — Parameters
 
-### Configuration optimizer
+![Parameters](docs/screenshots/en/06-parameters.png)
 
-![Optimizer](docs/screenshots/optimizer-analysis.png)
+### 07 — Optimizer and measured evaluation
 
-### Strata update center
+![Optimizer and measured evaluation](docs/screenshots/en/07-optimizer-evaluation.png)
 
-![Updates](docs/screenshots/update.png)
+### 08 — Strata updates
 
-### Encrypted tunnel
+![Updates](docs/screenshots/en/08-updates.png)
 
-![Tunnel](docs/screenshots/tunnel.png)
+### 09 — Encrypted tunnel
 
-### Model registration
+![Tunnel](docs/screenshots/en/09-tunnel.png)
 
-![Model registration](docs/screenshots/add.png)
+### 10 — Model registration
 
-### Activity history
+![Model registration](docs/screenshots/en/10-registration.png)
 
-![Activity](docs/screenshots/activity.png)
+### 11 — Activity
 
+![Activity](docs/screenshots/en/11-activity.png)
+
+See the [full English gallery with explanations](docs/screenshots/en/README.md).
 ## Security and repository boundaries
 
 This repository contains the console source and sanitized templates. It does not contain tokens, environment files, traces, logs, GGUF files, model packs, local engine binaries or machine-specific paths. Model removal is catalog-only: the console never deletes original model artifacts automatically.

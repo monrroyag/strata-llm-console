@@ -32,17 +32,17 @@ Der Bot mit Allowlist steuert Status, Modellauswahl, Stoppen, Entladen, Bestäti
 
 ## Screenshots
 
-![Gruppierte Navigation](../screenshots/models-grouped-en-final2.png)
-![Leistung](../screenshots/performance.png)
-![Traces](../screenshots/traces-errors.png)
-![Verbindung](../screenshots/connection-final.png)
-![Einstellungen](../screenshots/preferences-latest.png)
-![Parameter](../screenshots/parameters.png)
-![Optimierer](../screenshots/optimizer-analysis.png)
-![Updates](../screenshots/update.png)
-![Tunnel](../screenshots/tunnel.png)
-![Modellregistrierung](../screenshots/add.png)
-![Aktivität](../screenshots/activity.png)
+![Gruppierte Navigation](../screenshots/en/01-models.png)
+![Leistung](../screenshots/en/02-performance.png)
+![Traces](../screenshots/en/03-traces.png)
+![Verbindung](../screenshots/en/04-connection.png)
+![Einstellungen](../screenshots/en/05-preferences.png)
+![Parameter](../screenshots/en/06-parameters.png)
+![Optimierer](../screenshots/en/07-optimizer-evaluation.png)
+![Updates](../screenshots/en/08-updates.png)
+![Tunnel](../screenshots/en/09-tunnel.png)
+![Modellregistrierung](../screenshots/en/10-registration.png)
+![Aktivität](../screenshots/en/11-activity.png)
 
 ## Linux-Installation
 

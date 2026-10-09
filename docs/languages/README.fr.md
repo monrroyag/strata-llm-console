@@ -32,17 +32,17 @@ Le bot avec liste autorisée contrôle l’état, la sélection des modèles, l�
 
 ## Captures
 
-![Navigation groupée](../screenshots/models-grouped-en-final2.png)
-![Performances](../screenshots/performance.png)
-![Traces](../screenshots/traces-errors.png)
-![Connexion](../screenshots/connection-final.png)
-![Préférences](../screenshots/preferences-latest.png)
-![Paramètres](../screenshots/parameters.png)
-![Optimiseur](../screenshots/optimizer-analysis.png)
-![Mises à jour](../screenshots/update.png)
-![Tunnel](../screenshots/tunnel.png)
-![Ajout d’un modèle](../screenshots/add.png)
-![Activité](../screenshots/activity.png)
+![Navigation groupée](../screenshots/en/01-models.png)
+![Performances](../screenshots/en/02-performance.png)
+![Traces](../screenshots/en/03-traces.png)
+![Connexion](../screenshots/en/04-connection.png)
+![Préférences](../screenshots/en/05-preferences.png)
+![Paramètres](../screenshots/en/06-parameters.png)
+![Optimiseur](../screenshots/en/07-optimizer-evaluation.png)
+![Mises à jour](../screenshots/en/08-updates.png)
+![Tunnel](../screenshots/en/09-tunnel.png)
+![Ajout d’un modèle](../screenshots/en/10-registration.png)
+![Activité](../screenshots/en/11-activity.png)
 
 ## Installation Linux
 

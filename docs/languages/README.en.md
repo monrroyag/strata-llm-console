@@ -30,19 +30,21 @@ The optimizer evaluates hardware memory, requested context, KV quantization, exp
 
 The allowlisted bot supports status, model selection, stop/unload confirmations, traces, errors, optimizer output, connection status and Strata update checks. New chats use English and can choose another locale from the language menu.
 
-## Screenshots
+## English screenshot gallery
 
-![Grouped navigation](../screenshots/models-grouped-en-final2.png)
-![Performance](../screenshots/performance.png)
-![Request traces](../screenshots/traces-errors.png)
-![Connection](../screenshots/connection-final.png)
-![Preferences](../screenshots/preferences-latest.png)
-![Parameters](../screenshots/parameters.png)
-![Optimizer](../screenshots/optimizer-analysis.png)
-![Updates](../screenshots/update.png)
-![Tunnel](../screenshots/tunnel.png)
-![Model registration](../screenshots/add.png)
-![Activity](../screenshots/activity.png)
+[Open the ordered gallery with an explanation of every capture](../screenshots/en/README.md)
+
+![Model inventory](../screenshots/en/01-models.png)
+![Performance](../screenshots/en/02-performance.png)
+![Request traces](../screenshots/en/03-traces.png)
+![Connection](../screenshots/en/04-connection.png)
+![Preferences](../screenshots/en/05-preferences.png)
+![Parameters](../screenshots/en/06-parameters.png)
+![Optimizer and evaluation](../screenshots/en/07-optimizer-evaluation.png)
+![Updates](../screenshots/en/08-updates.png)
+![Tunnel](../screenshots/en/09-tunnel.png)
+![Model registration](../screenshots/en/10-registration.png)
+![Activity](../screenshots/en/11-activity.png)
 
 ## Linux installation
 
