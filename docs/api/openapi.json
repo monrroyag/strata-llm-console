@@ -2,53 +2,1326 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Strata LLM Console API",
-    "version": "0.2.0",
-    "description": "Authenticated control plane and OpenAI-compatible gateway for local Strata inference."
+    "version": "0.3.0",
+    "description": "Authenticated control plane and OpenAI-compatible gateway for local inference."
   },
-  "servers": [{"url": "http://127.0.0.1:8090"}],
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8090"
+    }
+  ],
   "tags": [
-    {"name": "Health"},
-    {"name": "OpenAI gateway"},
-    {"name": "Control plane"},
-    {"name": "Observability"}
+    {
+      "name": "Health"
+    },
+    {
+      "name": "Gateway"
+    },
+    {
+      "name": "Control"
+    },
+    {
+      "name": "Observability"
+    },
+    {
+      "name": "Updates"
+    }
   ],
   "components": {
     "securitySchemes": {
-      "ConsoleToken": {"type": "apiKey", "in": "header", "name": "X-Strata-Token"},
-      "BearerToken": {"type": "http", "scheme": "bearer"}
+      "ConsoleToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Strata-Token"
+      },
+      "BearerToken": {
+        "type": "http",
+        "scheme": "bearer"
+      }
     },
     "responses": {
-      "Unauthorized": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
-      "BadRequest": {"description": "Invalid request", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
-      "NotFound": {"description": "Resource not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+      "Error": {
+        "description": "Structured error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
     },
     "schemas": {
-      "Error": {"type": "object", "required": ["error"], "properties": {"error": {"type": "object", "required": ["message"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}}}},
-      "ModelRef": {"type": "object", "required": ["model"], "properties": {"model": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"}}},
-      "ChatCompletion": {"type": "object", "required": ["model", "messages"], "properties": {"model": {"type": "string"}, "messages": {"type": "array", "items": {"type": "object"}}, "stream": {"type": "boolean"}, "max_tokens": {"type": "integer", "minimum": 1}, "temperature": {"type": "number", "minimum": 0, "maximum": 2}}}
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ]
+          }
+        }
+      },
+      "JSON": {
+        "type": "object",
+        "additionalProperties": true
+      }
     }
   },
   "paths": {
-    "/health": {"get": {"tags": ["Health"], "security": [], "responses": {"200": {"description": "Minimal liveness response"}}}},
-    "/v1/models": {"get": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "responses": {"200": {"description": "Available models"}, "401": {"$ref": "#/components/responses/Unauthorized"}}}},
-    "/v1/chat/completions": {"post": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChatCompletion"}}}}, "responses": {"200": {"description": "Completion or SSE stream"}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}}}},
-    "/v1/responses": {"post": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "responses": {"200": {"description": "Responses-compatible forwarding"}}}},
-    "/v1/messages": {"post": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "responses": {"200": {"description": "Messages-compatible forwarding"}}}},
-    "/v1/embeddings": {"post": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "responses": {"200": {"description": "Embeddings-compatible forwarding"}}}},
-    "/api/evaluations": {"post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"202": {"description": "Measured evaluation job created"}}}},
-    "/api/evaluations/{evaluation_id}": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Evaluation progress/results"}}}},
-    "/api/evaluations/{evaluation_id}/apply": {"post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Measured candidate applied"}}}},
-    "/api/jobs": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Durable job list"}}}},
-    "/api/jobs/{job_id}": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "parameters": [{"name": "job_id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Job status"}, "404": {"$ref": "#/components/responses/NotFound"}}}},
-    "/api/jobs/{job_id}/cancel": {"post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Cancellation requested"}}}},
-    "/api/status": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Models and hardware status"}}}},
-    "/api/params-help": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Versioned parameter schema"}}}},
-    "/api/optimize": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "parameters": [{"name": "context", "in": "query", "schema": {"type": "integer", "minimum": 4096, "maximum": 262144}}, {"name": "profile", "in": "query", "schema": {"type": "string", "enum": ["balanced", "speed", "long", "code"]}}, {"name": "model", "in": "query", "schema": {"type": "string"}}], "responses": {"200": {"description": "Evidence-backed recommendation"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
-    "/api/traces": {"get": {"tags": ["Observability"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Bounded request trace summaries"}}}},
-    "/api/traces/{trace_id}": {"get": {"tags": ["Observability"], "security": [{"ConsoleToken": []}], "parameters": [{"name": "trace_id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Trace detail"}, "404": {"$ref": "#/components/responses/NotFound"}}}},
-    "/api/connection": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Connection status"}}}, "post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Connection change prepared"}}}},
-    "/api/backends": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Runtime capability discovery"}}}},
-    "/api/update-status": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Read-only engine version check"}}}},
-    "/api/update": {"post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Explicit engine update result"}}}}
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Liveness",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Liveness"
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "tags": [
+          "Gateway"
+        ],
+        "summary": "List available models",
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List available models"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/chat/completions": {
+      "post": {
+        "tags": [
+          "Gateway"
+        ],
+        "summary": "OpenAI-compatible chat completion",
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OpenAI-compatible chat completion"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/responses": {
+      "post": {
+        "tags": [
+          "Gateway"
+        ],
+        "summary": "Responses-compatible forwarding",
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Responses-compatible forwarding"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages": {
+      "post": {
+        "tags": [
+          "Gateway"
+        ],
+        "summary": "Anthropic-compatible forwarding",
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Anthropic-compatible forwarding"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/embeddings": {
+      "post": {
+        "tags": [
+          "Gateway"
+        ],
+        "summary": "Embedding forwarding",
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Embedding forwarding"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Models and hardware status",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Models and hardware status"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/detail": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Model detail",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Model detail"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/catalog": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Model catalog",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Model catalog"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/backends": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Runtime capability discovery",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runtime capability discovery"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/params-help": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Versioned parameter help",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versioned parameter help"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "This API contract",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "This API contract"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/config-get": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Read model configuration",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read model configuration"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/config": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Validate and save model configuration",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validate and save model configuration"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/add": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Register a model",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Register a model"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/select": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Select and load a model",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Select and load a model"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/load": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Load a model",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Load a model"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/unload": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Unload a model",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unload a model"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stop": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Stop a model",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stop a model"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/remove": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Remove a model from the catalog",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Remove a model from the catalog"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/default": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Set default model",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Set default model"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fit-check": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Check model fit",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Check model fit"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/optimize": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Evidence-backed optimization recommendation",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evidence-backed optimization recommendation"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "context",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 4096,
+              "maximum": 262144
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "balanced",
+                "speed",
+                "long",
+                "code"
+              ]
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/history": {
+      "get": {
+        "tags": [
+          "Observability"
+        ],
+        "summary": "Performance history",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Performance history"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/history-compare": {
+      "get": {
+        "tags": [
+          "Observability"
+        ],
+        "summary": "Compare recorded setups",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compare recorded setups"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/traces": {
+      "get": {
+        "tags": [
+          "Observability"
+        ],
+        "summary": "Bounded request traces",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded request traces"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ]
+      }
+    },
+    "/api/traces/{trace_id}": {
+      "get": {
+        "tags": [
+          "Observability"
+        ],
+        "summary": "Trace detail",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trace detail"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "trace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/evaluations": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Create measured evaluation",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Create measured evaluation"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/evaluations/{job_id}": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Evaluation result/job status",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evaluation result/job status"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/evaluations/{job_id}/apply": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Apply measured candidate",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Apply measured candidate"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Durable jobs",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable jobs"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ]
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Job status",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Cancel job",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancel job"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/connection": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Connection status",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connection status"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Prepare connection change",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prepare connection change"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tunnel-status": {
+      "get": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Tunnel status",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tunnel status"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/tunnel-start": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Start tunnel job",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Start tunnel job"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tunnel-stop": {
+      "post": {
+        "tags": [
+          "Control"
+        ],
+        "summary": "Stop tunnel job",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Stop tunnel job"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/update-status": {
+      "get": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Engine update check",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine update check"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/update-notifications": {
+      "get": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Engine and console update notifications",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine and console update notifications"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/update": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Apply explicit engine update",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Apply explicit engine update"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/update-revert": {
+      "post": {
+        "tags": [
+          "Updates"
+        ],
+        "summary": "Revert engine update",
+        "security": [
+          {
+            "ConsoleToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revert engine update"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JSON"
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }

@@ -33,6 +33,19 @@ class TelegramControlBotTests(unittest.TestCase):
             bot.callback(42, "stop:model-x", "cb-2")
         self.assertEqual(local.call_args_list[0].args, ("/api/stop", {"model": "model-x"}))
 
+    def test_update_id_is_deduplicated_before_side_effects(self):
+        with patch.object(bot.state_store, "get", return_value=[]), patch.object(bot.state_store, "put") as put:
+            self.assertTrue(bot.claim_update(77))
+            put.assert_called_once()
+        with patch.object(bot.state_store, "get", return_value=[77]):
+            self.assertFalse(bot.claim_update(77))
+
+    def test_action_rate_limit_is_bounded(self):
+        bot._rate_events.clear()
+        with patch.object(bot, "RATE_LIMIT", 1):
+            self.assertTrue(bot.rate_allowed("actor:chat"))
+            self.assertFalse(bot.rate_allowed("actor:chat"))
+
 
 if __name__ == "__main__":
     unittest.main()

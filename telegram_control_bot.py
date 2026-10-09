@@ -9,6 +9,7 @@ No imprime tokens. Solo usuarios allowlisted pueden ejecutar acciones.
 """
 from __future__ import annotations
 
+import collections
 import html
 import json
 import os
@@ -19,17 +20,21 @@ import urllib.request
 from pathlib import Path
 
 import state_store
+from paths import CODE_ROOT, runtime_path
 
-BASE = Path(__file__).resolve().parent
+BASE = CODE_ROOT
 API = os.environ.get("STRATA_CONSOLE_API", "http://127.0.0.1:8090")
 TOKEN = os.environ.get("TELEGRAM_STRATA_BOT_TOKEN", "")
 ADMIN_IDS = {x.strip() for x in os.environ.get("TELEGRAM_STRATA_ADMIN_IDS", "").split(",") if x.strip()}
 ADMIN_CHAT_IDS = {x.strip() for x in os.environ.get("TELEGRAM_STRATA_CHAT_IDS", "").split(",") if x.strip()}
-OFFSET_FILE = BASE / "data" / "telegram-offset"
-LANG_FILE = BASE / "data" / "telegram-languages.json"
+OFFSET_FILE = runtime_path("data", "telegram-offset")
+LANG_FILE = runtime_path("data", "telegram-languages.json")
 LANGS = {"es": "🇪🇸 Español", "en": "🇬🇧 English", "pt": "🇧🇷 Português", "fr": "🇫🇷 Français", "de": "🇩🇪 Deutsch"}
+RATE_WINDOW_SECONDS = 60
+RATE_LIMIT = 30
+_rate_events: dict[str, collections.deque[float]] = {}
 TEXT = {
-    "en": {"menu": "STRATA CONTROL CENTER\nSelect an operation.", "status": "Local status", "active": "Active", "models": "Models", "traces": "Traces", "connection": "Connection", "backends": "Backends", "optimizer": "Optimizer", "update": "Update Strata", "stop": "Stop model", "language": "Language", "back": "Back", "choose_model": "Select a model.", "not_found": "Model not found.", "confirm_stop": "Confirm stopping <code>{model}</code>?", "confirm_remove": "Remove <code>{model}</code> from the catalog? GGUF/packs are not deleted.", "confirm_update": "Confirm updating the official Strata repository?", "cancel": "Cancel", "confirm": "Confirm", "unauthorized": "Private bot: chat_id not authorized.", "no_traces": "No observed requests.", "last_traces": "Latest traces", "error": "Error", "response": "Response", "reasoning": "Exposed reasoning", "detail": "Detail", "no_model": "No model selected.", "saved": "Language saved: {language}"},
+    "en": {"menu": "STRATA CONTROL CENTER\nSelect an operation.", "status": "Local status", "active": "Active", "models": "Models", "traces": "Traces", "connection": "Connection", "backends": "Backends", "optimizer": "Optimizer", "update": "Update Strata", "stop": "Stop model", "language": "Language", "back": "Back", "choose_model": "Select a model.", "not_found": "Model not found.", "confirm_stop": "Confirm stopping <code>{model}</code>?", "confirm_remove": "Remove <code>{model}</code> from the catalog? GGUF/packs are not deleted.", "confirm_update": "Confirm updating the official Strata repository?", "cancel": "Cancel", "confirm": "Confirm", "unauthorized": "Private bot: chat_id not authorized.", "no_traces": "No observed requests.", "last_traces": "Latest traces", "error": "Error", "response": "Response", "reasoning": "Exposed reasoning", "detail": "Detail", "no_model": "No model selected.", "saved": "Language saved: {language}", "rate_limited": "Too many actions; try again shortly."},
     "es": {"menu": "CENTRO DE CONTROL STRATA\nSelecciona una operación.", "status": "Estado local", "active": "Activo", "models": "Modelos", "traces": "Trazas", "connection": "Conexión", "backends": "Backends", "optimizer": "Optimizador", "update": "Actualizar Strata", "stop": "Detener modelo", "language": "Idioma", "back": "Volver", "choose_model": "Selecciona un modelo.", "not_found": "Modelo no encontrado.", "confirm_stop": "¿Confirmar detener <code>{model}</code>?", "confirm_remove": "¿Quitar <code>{model}</code> del catálogo? No se borran GGUF/packs.", "confirm_update": "¿Confirmar actualización del repositorio oficial de Strata?", "cancel": "Cancelar", "confirm": "Confirmar", "unauthorized": "Bot privado: chat_id no autorizado.", "no_traces": "No hay requests observados.", "last_traces": "Últimas trazas", "error": "Error", "response": "Respuesta", "reasoning": "Razonamiento expuesto", "detail": "Detalle", "no_model": "No hay modelo seleccionado.", "saved": "Idioma guardado: {language}"},
     "pt": {"menu": "CENTRO DE CONTROLE STRATA\nSelecione uma operação.", "status": "Estado local", "active": "Ativo", "models": "Modelos", "traces": "Rastreamento", "connection": "Conexão", "backends": "Backends", "optimizer": "Otimizador", "update": "Atualizar Strata", "stop": "Parar modelo", "language": "Idioma", "back": "Voltar", "choose_model": "Selecione um modelo.", "not_found": "Modelo não encontrado.", "confirm_stop": "Confirmar parada de <code>{model}</code>?", "confirm_remove": "Remover <code>{model}</code> do catálogo? GGUF/packs não serão apagados.", "confirm_update": "Confirmar atualização do repositório oficial do Strata?", "cancel": "Cancelar", "confirm": "Confirmar", "unauthorized": "Bot privado: chat_id não autorizado.", "no_traces": "Nenhuma requisição observada.", "last_traces": "Últimos rastreamentos", "error": "Erro", "response": "Resposta", "reasoning": "Raciocínio exposto", "detail": "Detalhes", "no_model": "Nenhum modelo selecionado.", "saved": "Idioma salvo: {language}"},
     "fr": {"menu": "CENTRE DE CONTRÔLE STRATA\nSélectionnez une opération.", "status": "État local", "active": "Actif", "models": "Modèles", "traces": "Traçabilité", "connection": "Connexion", "backends": "Backends", "optimizer": "Optimiseur", "update": "Mettre à jour Strata", "stop": "Arrêter le modèle", "language": "Langue", "back": "Retour", "choose_model": "Sélectionnez un modèle.", "not_found": "Modèle introuvable.", "confirm_stop": "Confirmer l'arrêt de <code>{model}</code> ?", "confirm_remove": "Retirer <code>{model}</code> du catalogue ? Les GGUF/packs ne seront pas supprimés.", "confirm_update": "Confirmer la mise à jour du dépôt officiel Strata ?", "cancel": "Annuler", "confirm": "Confirmer", "unauthorized": "Bot privé : chat_id non autorisé.", "no_traces": "Aucune requête observée.", "last_traces": "Dernières traces", "error": "Erreur", "response": "Réponse", "reasoning": "Raisonnement exposé", "detail": "Détail", "no_model": "Aucun modèle sélectionné.", "saved": "Langue enregistrée : {language}"},
@@ -70,10 +75,24 @@ def tg(method: str, payload: dict | None = None) -> dict:
 
 
 def console_token() -> str:
-    try:
-        return (BASE / "token").read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
+    value = os.environ.get("STRATA_CONSOLE_TOKEN", "")
+    if value:
+        return value
+    candidates = [
+        Path(os.environ["STRATA_CONSOLE_TOKEN_FILE"]) if os.environ.get("STRATA_CONSOLE_TOKEN_FILE") else None,
+        BASE / "token",
+        BASE / "data" / "token",
+    ]
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        try:
+            value = candidate.read_text(encoding="utf-8").strip()
+            if value:
+                return value
+        except OSError:
+            continue
+    return ""
 
 
 def local(path: str, body: dict | None = None) -> dict:
@@ -249,13 +268,52 @@ def callback(chat_id, data, callback_id):
         return send(chat_id, json.dumps(local("/api/update", {}), ensure_ascii=False, indent=2), [[("↩️ Menú", "menu")]])
 
 
+def claim_update(update_id) -> bool:
+    """Deduplicate Telegram updates durably before executing side effects."""
+    if update_id is None:
+        return True
+    key = "telegram_processed_updates"
+    seen = state_store.get(key) or []
+    try:
+        update_id = int(update_id)
+    except (TypeError, ValueError):
+        return False
+    if update_id in seen:
+        return False
+    state_store.put(key, [*seen[-511:], update_id])
+    return True
+
+
+def rate_allowed(identity) -> bool:
+    now = time.monotonic()
+    key = str(identity)
+    events = _rate_events.setdefault(key, collections.deque())
+    while events and now - events[0] >= RATE_WINDOW_SECONDS:
+        events.popleft()
+    if len(events) >= RATE_LIMIT:
+        return False
+    events.append(now)
+    if len(_rate_events) > 4096:
+        oldest = next(iter(_rate_events))
+        _rate_events.pop(oldest, None)
+    return True
+
+
 def handle(update):
+    if not claim_update(update.get("update_id")):
+        return
     msg = update.get("message") or {}
     cb = update.get("callback_query")
     chat_id = (cb or {}).get("message", msg).get("chat", {}).get("id")
     actor_id = ((cb or {}).get("from") or msg.get("from") or {}).get("id")
-    if chat_id is None or not allowed(chat_id, actor_id):
-        if chat_id is not None: send(chat_id, "⛔ " + tx(chat_id, "unauthorized"))
+    if chat_id is None:
+        return
+    if not allowed(chat_id, actor_id):
+        if rate_allowed(f"unauth:{chat_id}"):
+            send(chat_id, "⛔ " + tx(chat_id, "unauthorized"))
+        return
+    if not rate_allowed(f"auth:{actor_id}:{chat_id}"):
+        send(chat_id, "⏱️ " + tx(chat_id, "rate_limited"))
         return
     if cb: return callback(chat_id, cb.get("data", ""), cb.get("id"))
     user_lang = (msg.get("from") or {}).get("language_code", "")[:2]

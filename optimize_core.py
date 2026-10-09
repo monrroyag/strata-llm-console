@@ -3,7 +3,9 @@ from __future__ import annotations
 import json, subprocess
 from collections import deque
 from pathlib import Path
-BASE=Path(__file__).resolve().parent; HIST=BASE/'data'/'history'
+from paths import CODE_ROOT, runtime_path
+
+BASE=CODE_ROOT; HIST=runtime_path('data','history')
 EXPERT_MIN_MIB=3000
 KV_BPT={'fp16':273*1024,'int8':137*1024,'q4_0':68*1024,'k8v4':106*1024}
 

@@ -11,8 +11,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
 
-BASE = Path(__file__).resolve().parent
-DB = BASE / "data" / "jobs.sqlite3"
+from paths import CODE_ROOT, runtime_path
+
+BASE = CODE_ROOT
+DB = runtime_path("data", "jobs.sqlite3")
 _LOCK = threading.Lock()
 _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="strata-job")
 

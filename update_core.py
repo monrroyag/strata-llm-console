@@ -11,16 +11,17 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import state_store
+from paths import CODE_ROOT, STATE_ROOT, runtime_path
 
-BASE = Path(__file__).resolve().parent
-CATALOG = BASE / "catalog.json"
+BASE = CODE_ROOT
+CATALOG = runtime_path("catalog.json")
 OFFICIAL_REPO = "https://github.com/Niko1221/Strata.git"
-ENGINE_INSTALL = BASE / "data" / "engine" / "Strata"
+ENGINE_INSTALL = runtime_path("data", "engine", "Strata")
 
 
 def _engine_root(cat: dict) -> Path:
     raw = Path(str(cat.get("engine_root", ""))).expanduser()
-    return (BASE / raw).resolve() if not raw.is_absolute() else raw.resolve()
+    return (STATE_ROOT / raw).resolve() if not raw.is_absolute() else raw.resolve()
 
 
 def _save_catalog(cat: dict) -> None:

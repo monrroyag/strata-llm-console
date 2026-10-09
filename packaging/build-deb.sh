@@ -18,8 +18,8 @@ mkdir -p "$DEBIAN" "$APP/data" "$APP/docs" "$APP/configs" "$APP/schemas" "$APP/w
   "$PKGROOT/lib/systemd/system" "$PKGROOT/usr/bin"
 cd "$ROOT"
 cp backend_core.py connection_core.py console_core.py console_server.py history_core.py job_core.py evaluation_core.py \
-   optimize_core.py state_store.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py update_monitor.py \
-   catalog.json .gitignore README.md VERSION telegram-control.env.example telegram-control.service.example "$APP/"
+   optimize_core.py state_store.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py update_monitor.py cli.py runtime_drivers.py paths.py \
+   catalog.json .gitignore README.md LICENSE VERSION CHANGELOG.md requirements.txt pyproject.toml telegram-control.env.example telegram-control.service.example "$APP/"
 cp -r configs/. "$APP/configs/"
 cp -r schemas/. "$APP/schemas/"
 cp -r web/. "$APP/web/"
@@ -31,7 +31,7 @@ Package: strata-llm-console
 Version: $VERSION
 Section: net
 Priority: optional
-Architecture: all
+Architecture: amd64
 Depends: python3 (>= 3.10), ca-certificates, git
 Maintainer: monrroyag <monrroyag@users.noreply.github.com>
 Description: Strata LLM Console control plane
@@ -50,7 +50,8 @@ Type=simple
 User=strata-console
 Group=strata-console
 WorkingDirectory=/opt/strata-llm-console
-Environment=HOME=/var/lib/strata-console
+Environment=STRATA_CONSOLE_STATE_DIR=/var/lib/strata-llm-console
+Environment=STRATA_CONSOLE_TOKEN_FILE=/var/lib/strata-llm-console/token
 Environment=STRATA_CONSOLE_SYSTEM_SERVICE=1
 Environment=STRATA_CONSOLE_HOST=127.0.0.1
 Environment=STRATA_CONSOLE_PORT=8090
@@ -67,10 +68,19 @@ ReadWritePaths=/var/lib/strata-llm-console /var/log/strata-llm-console /etc/syst
 WantedBy=multi-user.target
 EOF
 
+cat > "$PKGROOT/usr/bin/strata-console" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cd /opt/strata-llm-console
+exec /usr/bin/python3 cli.py "$@"
+EOF
+chmod 0755 "$PKGROOT/usr/bin/strata-console"
+
 cat > "$PKGROOT/usr/bin/strata-llm-console" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 cd /opt/strata-llm-console
+if [ "${1:-}" = "serve" ]; then shift; fi
 exec /usr/bin/python3 console_server.py "$@"
 EOF
 chmod 0755 "$PKGROOT/usr/bin/strata-llm-console"
@@ -95,23 +105,9 @@ if [ ! -e "$STATE/configs/.seeded" ]; then
   : > "$STATE/configs/.seeded"
 fi
 if [ ! -e "$STATE/data/params_help.json" ] && [ -f "$APP/data/params_help.json" ]; then cp "$APP/data/params_help.json" "$STATE/data/params_help.json"; fi
-for item in catalog.json configs data logs token; do
-  rm -rf "$APP/$item"
-  ln -s "$STATE/$item" "$APP/$item"
-done
-if command -v git >/dev/null 2>&1; then
-  if ! PYTHONPATH="$APP" /usr/bin/python3 - <<'PY'
-from console_core import load_catalog
-from update_core import ensure_engine
-result = ensure_engine(load_catalog())
-print("Strata checkout:", result.get("root"))
-if result.get("model_setup_required"):
-    print("Strata source installed; model setup remains explicit to avoid an unsolicited large model download.")
-PY
-  then
-    echo "Warning: Strata could not be installed automatically; use the Update panel after network access is available." >&2
-  fi
-fi
+# Runtime paths are selected through STRATA_CONSOLE_STATE_DIR; never mutate the
+# replaceable code tree with symlinks.
+# execute upstream code or access the network as root. Use the Update panel/CLI action.
 chown -R "$USER_NAME:$GROUP_NAME" "$STATE" "$LOG"
 chmod 0750 "$STATE" "$STATE/data" "$STATE/configs" "$STATE/logs" "$LOG"
 [ -e "$STATE/catalog.json" ] && chmod 0600 "$STATE/catalog.json" || true

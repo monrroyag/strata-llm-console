@@ -8,6 +8,7 @@ import socket
 import urllib.error
 import urllib.request
 
+import runtime_drivers
 
 def _port(port: int) -> bool:
     try:
@@ -25,32 +26,7 @@ def _get(url: str, timeout: float = 1.5):
         return None
 
 
-def status(strata_host: str, strata_port: int) -> dict:
-    strata_running = strata_host not in ("127.0.0.1", "localhost") or _port(strata_port)
-    ollama_probe = _get("http://127.0.0.1:11434/api/tags")
-    vllm_probe = _get("http://127.0.0.1:8000/v1/models")
-    ollama_bin = shutil.which("ollama")
-    vllm_bin = shutil.which("vllm")
-    vllm_module = importlib.util.find_spec("vllm") is not None
-    return {"backends": [
-        {
-            "id": "strata", "label": "Strata", "available": True, "running": strata_running,
-            "api": f"http://127.0.0.1:{strata_port}/v1",
-            "health": "reachable" if strata_running else "offline",
-            "features": ["OpenAI", "Anthropic", "SSE", "reasoning", "MTP", "vision"],
-        },
-        {
-            "id": "ollama", "label": "Ollama", "available": bool(ollama_bin or ollama_probe),
-            "running": ollama_probe is not None, "api": "http://127.0.0.1:11434/api",
-            "health": "reachable" if ollama_probe is not None else "offline",
-            "model_count": len((ollama_probe or {}).get("models", [])),
-            "features": ["pull", "list", "show", "delete", "running"] if ollama_probe is not None else ["detect"],
-        },
-        {
-            "id": "vllm", "label": "vLLM", "available": bool(vllm_bin or vllm_module or vllm_probe),
-            "running": vllm_probe is not None, "api": "http://127.0.0.1:8000/v1",
-            "health": "reachable" if vllm_probe is not None else "offline",
-            "model_count": len((vllm_probe or {}).get("data", [])),
-            "features": ["OpenAI", "continuous batching", "prefix cache", "Prometheus metrics"] if vllm_probe is not None else ["detect"],
-        },
-    ]}
+def status(strata_host: str, strata_port: int, catalog: dict | None = None) -> dict:
+    """Detect runtimes by observed endpoints/install evidence only."""
+    checkout = (catalog or {}).get("engine_root")
+    return {"backends": runtime_drivers.discover_all(strata_host, strata_port, checkout)}

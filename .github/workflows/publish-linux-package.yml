@@ -1,6 +1,7 @@
 name: Publish Linux package
 
 on:
+  pull_request:
   push:
     tags:
       - 'v*'
@@ -23,8 +24,11 @@ jobs:
           python-version: '3.12'
       - name: Compile and test Python
         run: |
-          python -m py_compile *.py
+          python -m py_compile *.py tools/*.py
           python -m unittest -v
+          python tools/generate_openapi.py
+          git diff --exit-code -- docs/api/openapi.json
+          python tools/validate_openapi.py
       - name: Validate frontend and packaging scripts
         run: |
           node --check web/app.js
@@ -45,6 +49,7 @@ jobs:
           ! tar -tzf dist/*.tar.gz | grep -E '(^|/)(token|.*\.gguf|traces\.jsonl)$'
 
   linux-bundle:
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: quality
     name: Build and publish Linux bundle
     runs-on: ubuntu-latest
@@ -73,6 +78,7 @@ jobs:
             --generate-notes
 
   container-package:
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: quality
     name: Publish OCI package to GHCR
     runs-on: ubuntu-latest

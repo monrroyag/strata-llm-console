@@ -14,8 +14,10 @@ import time
 from collections import deque
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
-HIST = BASE / "data" / "history"
+from paths import CODE_ROOT, runtime_path
+
+BASE = CODE_ROOT
+HIST = runtime_path("data", "history")
 HIST.mkdir(parents=True, exist_ok=True)
 
 MAX_ROWS = 5000
@@ -29,9 +31,12 @@ def _history_path(mid: str) -> Path:
     return HIST / f"{mid}.jsonl"
 
 
+from console_core import CONFIGS
+
+
 def _setup_snapshot(entry: dict, cat: dict) -> dict:
     try:
-        cfg = json.loads((BASE / entry["config"]).read_text(encoding="utf-8"))
+        cfg = json.loads((CONFIGS / Path(entry["config"]).name).read_text(encoding="utf-8"))
         args = cfg.get("args", [])
         flags = {}
         i = 0

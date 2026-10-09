@@ -99,6 +99,7 @@ const I18N = {
     opt_hint: "set the target context and profile; the system searches the best KV / growth / MTP / lookup mix using real VRAM/RAM and past performance.",
     opt_reco: "Recommended", opt_alt: "Alternatives", opt_apply: "apply to model", eval_title:"Measured evaluation", eval_hint:"Inference is blocked while candidates are measured.", eval_runs:"runs per prompt", eval_long:"long prompt characters", eval_run:"evaluate candidates", eval_apply:"apply measured configuration", eval_details:"view metrics", eval_empty:"No evaluation results yet.",
     opt_hist: "History reference", opt_est: "Estimate",
+    tab_chat: "Chat", chat_title: "Chat workspace", chat_hint: "Persisted locally in this browser; reasoning appears only when the engine emits it.", chat_model: "model", chat_effort: "reasoning effort", chat_theme: "chat theme", chat_max_tokens: "max output tokens", chat_none: "none", chat_low: "low", chat_medium: "medium", chat_high: "high", chat_theme_default: "Default", chat_theme_focus: "Focus", chat_theme_amber: "Amber", chat_theme_slate: "Slate", chat_export: "export markdown", chat_reset: "new chat", chat_system: "system instruction", chat_placeholder: "Write a message…", chat_send: "send", chat_empty: "Start a conversation with the active model.", chat_messages: "messages", chat_local: "local browser storage", chat_you: "you", chat_assistant: "assistant", chat_reasoning: "engine reasoning", chat_stream_unavailable: "Streaming is unavailable in this browser.", chat_error: "Chat: {error}",
   },
   pt: {}, fr: {}, de: {}
 };
@@ -151,5 +152,6 @@ function applyLang() {
       el.textContent = v;
     }
   });
+  document.querySelectorAll('[data-t-placeholder]').forEach(el => { el.placeholder = t(el.dataset.tPlaceholder); });
   document.documentElement.lang = lang();
 }

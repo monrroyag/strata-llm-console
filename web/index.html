@@ -20,6 +20,7 @@
   <nav class="tabs" role="tablist" aria-label="views">
     <details class="nav-group" open><summary data-t="nav_operate">Operate</summary><div class="nav-menu">
       <button role="tab" class="tab on" data-v="models" data-t="tab_models"></button>
+      <button role="tab" class="tab" data-v="chat" data-t="tab_chat"></button>
       <button role="tab" class="tab" data-v="params" data-t="tab_params"></button>
       <button role="tab" class="tab" data-v="opt" data-t="tab_opt"></button>
     </div></details>
@@ -81,6 +82,30 @@
       <div class="okpi"><span data-t="ov_context">CONTEXTO</span><b id="ovContext">—</b><small id="ovKv">—</small></div>
       <div class="okpi"><span data-t="ov_load">CARGA GPU</span><b id="ovLoad">—</b><small id="ovGpuTemp">—</small></div>
       <div class="okpi"><span data-t="ov_catalog">CATÁLOGO</span><b id="ovModels">—</b><small data-t="ov_catalog_sub">modelos registrados</small></div>
+    </div>
+  </section>
+
+  <!-- CHAT WORKSPACE -->
+  <section class="view" data-v="chat">
+    <div class="chat-shell">
+      <div class="sec chat-head">
+        <div class="sech"><h2 data-t="chat_title">Chat workspace</h2><span class="hint" data-t="chat_hint">Persisted locally in this browser; reasoning is shown only when emitted.</span></div>
+        <div class="chat-controls">
+          <label><span data-t="chat_model">model</span><select id="chatModel"></select></label>
+          <label><span data-t="chat_effort">reasoning effort</span><select id="chatEffort"><option value="none" data-t="chat_none">none</option><option value="low" data-t="chat_low">low</option><option value="medium" selected data-t="chat_medium">medium</option><option value="high" data-t="chat_high">high</option></select></label>
+          <label><span data-t="chat_theme">chat theme</span><select id="chatTheme"><option value="default" data-t="chat_theme_default">Default</option><option value="focus" data-t="chat_theme_focus">Focus</option><option value="amber" data-t="chat_theme_amber">Amber</option><option value="slate" data-t="chat_theme_slate">Slate</option></select></label>
+          <label><span data-t="chat_max_tokens">max output tokens</span><input id="chatMaxTokens" type="number" min="1" max="8192" value="1024"></label>
+          <button id="chatExport" class="gh" data-t="chat_export">export markdown</button><button id="chatReset" class="gh" data-t="chat_reset">new chat</button>
+        </div>
+      </div>
+      <div class="chat-workspace" id="chatWorkspace">
+        <div class="chat-thread" id="chatThread" aria-live="polite"><div class="trace-empty" data-t="chat_empty">Start a conversation with the active model.</div></div>
+        <div class="chat-side">
+          <label class="chat-system"><span data-t="chat_system">system instruction</span><textarea id="chatSystem" rows="7" placeholder="Optional instruction for this chat"></textarea></label>
+          <div class="chat-state" id="chatState">—</div>
+        </div>
+      </div>
+      <form class="chat-compose" id="chatForm"><textarea id="chatInput" rows="3" data-t-placeholder="chat_placeholder" placeholder="Write a message…"></textarea><button class="pri" type="submit" data-t="chat_send">send</button></form>
     </div>
   </section>
 

@@ -3,6 +3,7 @@ TLS extremo a extremo, sin abrir puertos en el router). El acceso queda
 protegido por la API key de Strata: sin key configurada el túnel se niega."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -14,12 +15,17 @@ import urllib.request
 from pathlib import Path
 
 import state_store
+from paths import CODE_ROOT, STATE_ROOT, runtime_path
 
-BASE = Path(__file__).resolve().parent
-BIN = BASE / "bin" / "cloudflared"
-STATE = BASE / "data" / "tunnel.json"
-LOGF = BASE / "logs" / "tunnel.log"
+BASE = CODE_ROOT
+BIN = runtime_path("bin", "cloudflared")
+STATE = runtime_path("data", "tunnel.json")
+LOGF = runtime_path("logs", "tunnel.log")
+CONFIGS = runtime_path("configs")
 URL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+CLOUDFLARED_VERSION = os.environ.get("STRATA_CONSOLE_CLOUDFLARED_VERSION", "2026.10.0")
+CLOUDFLARED_SHA256 = os.environ.get("STRATA_CONSOLE_CLOUDFLARED_SHA256", "d33ff2d14475178d2012c2c56beba87389ac5ded27649519f198a7d3134a99db")
+CLOUDFLARED_MAX_BYTES = 256 * 1024 * 1024
 
 _proc: subprocess.Popen | None = None
 _lock = threading.Lock()
@@ -47,23 +53,48 @@ def _load() -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def ensure_binary() -> str:
-    if BIN.exists():
+    if BIN.exists() and _sha256(BIN).lower() == CLOUDFLARED_SHA256.lower():
         return str(BIN)
     BIN.parent.mkdir(parents=True, exist_ok=True)
-    url = ("https://github.com/cloudflare/cloudflared/releases/latest/"
-           "download/cloudflared-linux-amd64")
-    tmp = BIN.with_suffix(".tmp")
-    with urllib.request.urlopen(url, timeout=120) as resp, tmp.open("wb") as fh:
-        fh.write(resp.read())
-    tmp.chmod(0o755)
-    tmp.replace(BIN)
+    url = f"https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
+    tmp = BIN.with_suffix(f".{os.getpid()}.tmp")
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with urllib.request.urlopen(url, timeout=120) as resp, tmp.open("wb") as fh:
+            while True:
+                chunk = resp.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > CLOUDFLARED_MAX_BYTES:
+                    raise ValueError("binario cloudflared supera el límite de descarga")
+                digest.update(chunk)
+                fh.write(chunk)
+        if digest.hexdigest().lower() != CLOUDFLARED_SHA256.lower():
+            raise ValueError("checksum SHA-256 de cloudflared no coincide con la versión fijada")
+        tmp.chmod(0o755)
+        tmp.replace(BIN)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
     return str(BIN)
 
 
 def api_key_set() -> bool:
     """El gateway sólo debe exponerse si el/los modelos exigen api key."""
-    for cfg in (BASE / "configs").glob("*.json"):
+    for cfg in CONFIGS.glob("*.json"):
         try:
             if json.loads(cfg.read_text(encoding="utf-8")).get("api_key"):
                 return True
@@ -74,7 +105,7 @@ def api_key_set() -> bool:
 
 def set_api_key_on_models(key: str) -> list[str]:
     touched = []
-    for cfg in (BASE / "configs").glob("*.json"):
+    for cfg in CONFIGS.glob("*.json"):
         try:
             data = json.loads(cfg.read_text(encoding="utf-8"))
         except Exception:

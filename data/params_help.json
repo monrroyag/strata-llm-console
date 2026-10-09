@@ -34,5 +34,6 @@
   "lazy_load": {"flag": "--lazy", "es": "Carga el engine con el primer request.", "type": "bool", "restart": true},
   "fit_max_tokens": {"flag": "--fit-max-tokens", "es": "Ajusta max_tokens al contexto restante.", "type": "bool", "restart": true},
   "api_monitor": {"flag": "--api-monitor", "es": "Activa el monitor de requests.", "type": "bool", "restart": true},
+  "parallel": {"flag": "config", "es": "Requests paralelos por modelo.", "range": [1, 64], "restart": true},
   "api_key": {"flag": "--api-key", "es": "Clave requerida por el engine para /v1.", "type": "secret", "restart": true}
 }

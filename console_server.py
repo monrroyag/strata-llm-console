@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import math
+import os
 import secrets
+import signal
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -31,6 +35,12 @@ UI = BASE / "web"
 OPENAPI = BASE / "docs" / "api" / "openapi.json"
 PARAMS_HELP = BASE / "data" / "params_help.json"
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+RATE_LIMIT_WINDOW_SECONDS = max(1, int(os.environ.get('STRATA_CONSOLE_RATE_WINDOW', '60')))
+RATE_LIMIT_REQUESTS = max(1, int(os.environ.get('STRATA_CONSOLE_RATE_LIMIT', '120')))
+_rate_lock = threading.Lock()
+_rate_buckets: dict[str, list[float]] = {}
+_connection_cache_lock = threading.Lock()
+_connection_cache: tuple[float, bool] | None = None
 
 
 def token() -> str:
@@ -57,6 +67,84 @@ def query(path: str) -> dict[str, list[str]]:
 def first_query(path: str, key: str, default: str | None = None) -> str | None:
     return query(path).get(key, [default])[0]
 
+
+def cors_enabled() -> bool:
+    global _connection_cache
+    now = time.monotonic()
+    with _connection_cache_lock:
+        if _connection_cache and now - _connection_cache[0] < 2:
+            return _connection_cache[1]
+        enabled = bool(connection_core.status(HOST, PORT, TOKEN_FILE).get("cors"))
+        _connection_cache = (now, enabled)
+        return enabled
+
+
+def gateway_rate_limit(client_ip: str) -> tuple[bool, int]:
+    """Bound gateway work per source; returns (allowed, retry-after seconds)."""
+    now = time.monotonic()
+    with _rate_lock:
+        events = [t for t in _rate_buckets.get(client_ip, []) if now - t < RATE_LIMIT_WINDOW_SECONDS]
+        if len(events) >= RATE_LIMIT_REQUESTS:
+            retry = max(1, int(RATE_LIMIT_WINDOW_SECONDS - (now - events[0]) + 0.999))
+            _rate_buckets[client_ip] = events
+            return False, retry
+        events.append(now)
+        _rate_buckets[client_ip] = events
+        if len(_rate_buckets) > 4096:
+            oldest = min(_rate_buckets, key=lambda key: _rate_buckets[key][-1] if _rate_buckets[key] else now)
+            _rate_buckets.pop(oldest, None)
+        return True, 0
+
+
+def parameter_help() -> dict:
+    try:
+        data = json.loads(PARAMS_HELP.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def validate_config_values(req: dict) -> None:
+    help_data = parameter_help()
+
+    def validate_one(key: str, value, meta: dict) -> None:
+        if meta.get("type") == "bool" and not isinstance(value, bool):
+            if str(value).lower() not in {"true", "false", "1", "0"}:
+                raise ValueError(f"{key} debe ser booleano")
+        options = meta.get("options")
+        if options and value not in options:
+            raise ValueError(f"{key} debe ser uno de: {', '.join(map(str, options))}")
+        bounds = meta.get("range")
+        if bounds:
+            try:
+                number = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{key} debe ser numérico") from exc
+            if not math.isfinite(number) or number < bounds[0] or number > bounds[1]:
+                raise ValueError(f"{key} fuera de rango [{bounds[0]}, {bounds[1]}]")
+        if meta.get("type") in {"path", "secret"} and (not isinstance(value, str) or len(value) > 1024 or "\n" in value or "\r" in value):
+            raise ValueError(f"{key} contiene un valor inválido")
+
+    for key, value in req.items():
+        if key == "model":
+            continue
+        if key == "api_key":
+            validate_one(key, value, {"type": "secret"})
+            continue
+        if key == "sampling":
+            if not isinstance(value, dict):
+                raise ValueError("sampling debe ser un objeto")
+            for sampling_key, sampling_value in value.items():
+                meta = help_data.get(sampling_key)
+                if not meta or meta.get("flag") != "sampling":
+                    raise ValueError(f"parámetro de sampling no permitido: {sampling_key}")
+                validate_one(sampling_key, sampling_value, meta)
+            continue
+        meta = help_data.get(key)
+        if not meta:
+            raise ValueError(f"parámetro no permitido: {key}")
+        validate_one(key, value, meta)
+
 # banderas engine soportadas por /api/config (key -> flag, tipo)
 ENGINE_FLAGS = {
     "max_context": "--max-context", "kv": "--kv", "spec": "--spec",
@@ -79,7 +167,6 @@ CFG_BOOLS = {"lazy_load": "--lazy", "fit_max_tokens": "--fit-max-tokens",
 
 def sampler_loop():
     """Cada 60 s guarda un sample de métricas por modelo con su setup vigente."""
-    import threading
     while True:
         try:
             cat = load_catalog()
@@ -89,12 +176,7 @@ def sampler_loop():
                     history_core.record(entry, m)
         except Exception:
             pass
-        import time
         time.sleep(60)
-
-
-threading.Thread(target=sampler_loop, daemon=True).start()
-update_monitor.start()
 
 
 def authorized(handler: BaseHTTPRequestHandler) -> bool:
@@ -203,8 +285,21 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(401, {"error": {"type": "authentication_error", "message": "token requerido"}})
         return False
 
+    def rate_guard(self) -> bool:
+        allowed, retry = gateway_rate_limit(self.client_address[0])
+        if allowed:
+            return True
+        self.send_response(429)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Retry-After", str(retry))
+        raw = jbytes({"error": {"type": "rate_limit_error", "message": "demasiadas requests al gateway"}})
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+        return False
+
     def end_headers(self):
-        if connection_core.status(HOST, PORT, TOKEN_FILE).get("cors"):
+        if cors_enabled():
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Strata-Token")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -236,6 +331,8 @@ class Handler(BaseHTTPRequestHandler):
     def proxy(self, path: str, body: bytes | None):
         if not connection_core.remote_allowed(self.client_address[0], authorized(self)):
             return self.send_json(401, {"error": {"type": "authentication_error", "message": "token requerido para clientes remotos"}})
+        if not self.rate_guard():
+            return
         if evaluation_core.is_blocked():
             return self.send_json(423, {"error": {"code": "EVALUATION_IN_PROGRESS", "message": "el modelo está bloqueado durante la evaluación", "job_id": evaluation_core.active_job()}})
         cat = load_catalog()
@@ -274,19 +371,32 @@ class Handler(BaseHTTPRequestHandler):
                             self.send_header(k, v)
                     self.send_header("Transfer-Encoding", "chunked")
                     self.end_headers()
+                    streamed = 0
+                    truncated = False
                     while True:
                         chunk = resp.read(8192)
                         if not chunk:
                             break
-                        if trace_id:
-                            trace_core.append_sse(trace_id, chunk)
-                        self.wfile.write(b"%x\r\n" % len(chunk) + chunk + b"\r\n")
-                        self.wfile.flush()
+                        if streamed + len(chunk) > MAX_RESPONSE_BYTES:
+                            chunk = chunk[:MAX_RESPONSE_BYTES - streamed]
+                            truncated = True
+                        if chunk:
+                            streamed += len(chunk)
+                            if trace_id:
+                                trace_core.append_sse(trace_id, chunk)
+                            self.wfile.write(b"%x\r\n" % len(chunk) + chunk + b"\r\n")
+                            self.wfile.flush()
+                        if truncated:
+                            break
                     self.wfile.write(b"0\r\n\r\n")
                     if trace_id:
-                        trace_core.finish(trace_id, resp.status)
+                        trace_core.finish(trace_id, resp.status, error="respuesta SSE truncada por límite de tamaño" if truncated else None)
                     return
-                payload = resp.read()
+                payload = resp.read(MAX_RESPONSE_BYTES + 1)
+                if len(payload) > MAX_RESPONSE_BYTES:
+                    if trace_id:
+                        trace_core.finish(trace_id, 502, error="respuesta upstream demasiado grande")
+                    return self.send_json(502, {"error": {"type": "proxy_error", "message": "respuesta upstream supera el límite de tamaño"}})
                 self.send_response(resp.status)
                 for k, v in resp.headers.items():
                     if k.lower() not in {"content-length", "connection", "transfer-encoding"}:
@@ -300,7 +410,9 @@ class Handler(BaseHTTPRequestHandler):
                     except (ValueError, TypeError):
                         trace_core.finish(trace_id, resp.status)
         except urllib.error.HTTPError as exc:
-            payload = exc.read()
+            payload = exc.read(MAX_RESPONSE_BYTES + 1)
+            if len(payload) > MAX_RESPONSE_BYTES:
+                payload = jbytes({"error": {"type": "proxy_error", "message": "error upstream demasiado grande"}})
             if trace_id:
                 trace_core.finish(trace_id, exc.code, error=payload.decode("utf-8", errors="replace")[:2000])
             self.send_response(exc.code)
@@ -339,6 +451,8 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/v1/models":
             if not connection_core.remote_allowed(self.client_address[0], authorized(self)):
                 self.send_json(401, {"error": {"type": "authentication_error", "message": "token requerido para clientes remotos"}})
+                return
+            if not self.rate_guard():
                 return
             cat = load_catalog()
             self.send_json(200, {"object": "list",
@@ -379,7 +493,7 @@ class Handler(BaseHTTPRequestHandler):
             args = cfg.get("args", [])
             def flag(f):
                 return args[args.index(f) + 1] if f in args else None
-            self.send_json(200, {"model": mid, "file": str(BASE / e["config"]),
+            self.send_json(200, {"model": mid, "file": str(safe_child(CONFIGS, Path(e["config"]).name)),
                                  "sampling": cfg.get("sampling") or {},
                                  "values": {"max_context": flag("--max-context"), "kv": flag("--kv"),
                                             "spec": flag("--spec"), "spec_min_p": flag("--spec-min-p"),
@@ -406,15 +520,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, optimize_core.optimize(ctx, q.get("profile", ["balanced"])[0], entry=entry))
             return
         if p == "/api/traces":
-            if not authorized(self):
-                self.send_json(401, {"error": {"message": "token requerido"}})
+            if not self.remote_guard():
                 return
             q = dict(kv.split("=", 1) for kv in self.path.split("?", 1)[1].split("&") if "=" in kv) if "?" in self.path else {}
             self.send_json(200, {"traces": trace_core.list_traces(int(q.get("limit", 50)))})
             return
         if p.startswith("/api/traces/"):
-            if not authorized(self):
-                self.send_json(401, {"error": {"message": "token requerido"}})
+            if not self.remote_guard():
                 return
             item = trace_core.get(p.rsplit("/", 1)[-1])
             self.send_json(200 if item else 404, item or {"error": {"message": "traza no encontrada"}})
@@ -505,7 +617,7 @@ class Handler(BaseHTTPRequestHandler):
             if not authorized(self):
                 self.send_json(401, {"error": {"message": "token requerido"}})
                 return
-            self.send_json(200, backend_core.status(HOST, PORT))
+            self.send_json(200, backend_core.status(HOST, PORT, load_catalog()))
             return
         if p == "/api/connection":
             if not authorized(self):
@@ -607,6 +719,7 @@ class Handler(BaseHTTPRequestHandler):
             elif p == "/api/remove":
                 self.send_json(200, remove_model(cat, req["model"]))
             elif p == "/api/config":
+                validate_config_values(req)
                 e = find(cat, req["model"])
                 if not e:
                     raise ValueError(f"modelo desconocido: {req['model']}")
@@ -679,5 +792,19 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     LOGS.mkdir(exist_ok=True)
+    threading.Thread(target=sampler_loop, daemon=True, name="metrics-sampler").start()
+    update_monitor.start()
     print(f"Strata Console en http://{HOST}:{PORT}  (panel: /; token stored in {TOKEN_FILE})", flush=True)
-    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
+    def _shutdown(signum, _frame):
+        print(f"received signal {signum}; stopping Strata Console", flush=True)
+        threading.Thread(target=httpd.shutdown, daemon=True).start()
+    try:
+        signal.signal(signal.SIGTERM, _shutdown)
+        signal.signal(signal.SIGINT, _shutdown)
+    except (ValueError, OSError):
+        pass
+    try:
+        httpd.serve_forever()
+    finally:
+        httpd.server_close()

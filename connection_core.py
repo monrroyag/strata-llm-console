@@ -12,10 +12,11 @@ import subprocess
 from pathlib import Path
 
 import state_store
+from paths import CODE_ROOT, runtime_path
 
-BASE = Path(__file__).resolve().parent
+BASE = CODE_ROOT
 SYSTEM_SERVICE = os.environ.get("STRATA_CONSOLE_SYSTEM_SERVICE", "0") == "1"
-STATE = BASE / "data" / "connection.json"
+STATE = runtime_path("data", "connection.json")
 DEFAULT_SERVICE = os.environ.get("STRATA_CONSOLE_SERVICE", "strata-llm-console.service")
 
 

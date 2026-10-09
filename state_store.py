@@ -14,8 +14,10 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
-DB = BASE / "data" / "state.sqlite3"
+from paths import CODE_ROOT, STATE_ROOT, runtime_path
+
+BASE = CODE_ROOT
+DB = runtime_path("data", "state.sqlite3")
 _LOCK = threading.RLock()
 
 

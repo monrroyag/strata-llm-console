@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
 import threading
 import time
 import urllib.error
@@ -13,21 +16,49 @@ import update_core
 from console_core import BASE, load_catalog
 
 INTERVAL = 600
-STRATA_REPO = "Niko1221/Strata"
-CONSOLE_REPO = "monrroyag/strata-llm-console"
+STRATA_REPO = os.environ.get("STRATA_CONSOLE_ENGINE_REPO", "Niko1221/Strata")
+
+def _derive_console_repo() -> str:
+    configured = os.environ.get("STRATA_CONSOLE_REPO")
+    if configured:
+        configured = configured.strip()
+        match = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", configured)
+        return match.group(1) if match else configured.removesuffix(".git")
+    try:
+        remote = subprocess.run(["git", "-C", str(BASE), "config", "--get", "remote.origin.url"], capture_output=True, text=True, timeout=5, check=False).stdout.strip()
+        match = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", remote)
+        if match:
+            return match.group(1)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "monrroyag/strata-llm-console"
+
+
+CONSOLE_REPO = _derive_console_repo()
 _CACHE_KEY = "update_monitor"
 _LOCK = threading.RLock()
 _CACHE: dict = state_store.get(_CACHE_KEY) or {}
+_HTTP_CACHE: dict = _CACHE.get("http_cache") or {}
 _THREAD: threading.Thread | None = None
 
 
-def _github(path: str) -> dict:
-    request = urllib.request.Request(
-        f"https://api.github.com{path}",
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "strata-llm-console-update-monitor"},
-    )
-    with urllib.request.urlopen(request, timeout=15) as response:
-        return json.loads(response.read(2 * 1024 * 1024) or b"{}")
+def _github(path: str, cache_key: str) -> dict:
+    cached = _HTTP_CACHE.get(cache_key) or {}
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "strata-llm-console-update-monitor"}
+    if cached.get("etag"):
+        headers["If-None-Match"] = cached["etag"]
+    request = urllib.request.Request(f"https://api.github.com{path}", headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read(2 * 1024 * 1024) or b"{}")
+            _HTTP_CACHE[cache_key] = {"etag": response.headers.get("ETag"), "payload": payload, "checked_at": time.time()}
+            return payload
+    except urllib.error.HTTPError as exc:
+        if exc.code == 304 and isinstance(cached.get("payload"), dict):
+            cached["checked_at"] = time.time()
+            _HTTP_CACHE[cache_key] = cached
+            return cached["payload"]
+        raise
 
 
 def _git(root: Path, *args: str) -> str | None:
@@ -63,7 +94,7 @@ def _strata(cat: dict) -> dict:
     if not local_commit:
         return result
     try:
-        remote = _github(f"/repos/{STRATA_REPO}/commits/main")
+        remote = _github(f"/repos/{STRATA_REPO}/commits/main", "strata_commit")
         latest = remote.get("sha")
         commit = remote.get("commit") or {}
         result["latest_commit"] = latest
@@ -75,6 +106,11 @@ def _strata(cat: dict) -> dict:
     except (OSError, ValueError, urllib.error.URLError) as exc:
         result["error"] = f"{type(exc).__name__}: {exc}"[:240]
     return result
+
+
+def _version_tuple(value: str | None) -> tuple[int, int, int] | None:
+    match = re.search(r"(?:^|v)(\d+)(?:\.(\d+))?(?:\.(\d+))?", str(value or ""))
+    return (int(match.group(1)), int(match.group(2) or 0), int(match.group(3) or 0)) if match else None
 
 
 def _console() -> dict:
@@ -90,7 +126,7 @@ def _console() -> dict:
         "changelog_url": f"https://github.com/{CONSOLE_REPO}/releases",
     }
     try:
-        release = _github(f"/repos/{CONSOLE_REPO}/releases/latest")
+        release = _github(f"/repos/{CONSOLE_REPO}/releases/latest", "console_release")
         tag = str(release.get("tag_name") or "")
         latest = tag[1:] if tag.startswith("v") else tag
         result["latest_version"] = latest or None
@@ -98,7 +134,12 @@ def _console() -> dict:
         result["published_at"] = release.get("published_at")
         body = str(release.get("body") or "")
         result["release_notes"] = body[:6000]
-        result["update_available"] = bool(current and latest and current != latest)
+        current_v, latest_v = _version_tuple(current), _version_tuple(latest)
+        result["comparison"] = "semver" if current_v and latest_v else "string"
+        result["local_build_ahead"] = bool(current_v and latest_v and current_v > latest_v)
+        result["update_available"] = bool(current and latest and ((latest_v > current_v) if current_v and latest_v else current != latest))
+        if result["local_build_ahead"]:
+            result["comparison_note"] = "local build is newer than the latest published release"
         if result["update_available"]:
             result["changes"] = [{"commit": tag, "date": str(release.get("published_at") or "")[:10],
                                    "subject": line.strip()[:240]} for line in body.splitlines()
@@ -121,7 +162,7 @@ def check_once() -> dict:
     updates = [item for item in (engine, console) if item.get("update_available") or item.get("install_required")]
     result = {"checked_at": time.time(), "next_check_at": time.time() + INTERVAL,
               "interval_seconds": INTERVAL, "updates": updates,
-              "engine": engine, "console": console}
+              "engine": engine, "console": console, "http_cache": _HTTP_CACHE}
     with _LOCK:
         _CACHE.clear()
         _CACHE.update(result)
@@ -131,15 +172,24 @@ def check_once() -> dict:
 
 def status() -> dict:
     with _LOCK:
-        return dict(_CACHE)
+        result = dict(_CACHE)
+    checked = result.get("checked_at")
+    age = max(0, time.time() - float(checked)) if checked else None
+    result["cache_age_seconds"] = round(age, 1) if age is not None else None
+    result["stale"] = age is None or age > INTERVAL * 2
+    result["monitor_state"] = "stale" if result["stale"] else "fresh"
+    return result
 
 
 def _loop() -> None:
     while True:
         try:
             check_once()
-        except Exception:
-            pass
+        except Exception as exc:
+            with _LOCK:
+                _CACHE["monitor_error"] = f"{type(exc).__name__}: {exc}"[:240]
+                _CACHE["monitor_error_at"] = time.time()
+                state_store.put(_CACHE_KEY, dict(_CACHE))
         time.sleep(INTERVAL)
 
 

@@ -12,8 +12,10 @@ import uuid
 from collections import deque
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
-STORE = BASE / "data" / "traces.jsonl"
+from paths import CODE_ROOT, runtime_path
+
+BASE = CODE_ROOT
+STORE = runtime_path("data", "traces.jsonl")
 MAX_TRACES = 100
 MAX_TEXT = 12000
 _lock = threading.Lock()

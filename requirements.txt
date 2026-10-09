@@ -1,0 +1,3 @@
+# Runtime dependencies
+# The console intentionally uses Python's standard library only.
+# Supported interpreter: Python >= 3.10.

@@ -22,11 +22,13 @@ from pathlib import Path
 
 import state_store
 
-BASE = Path(__file__).resolve().parent
-CATALOG = BASE / "catalog.json"
-CONFIGS = BASE / "configs"
-LOGS = BASE / "logs"
-TOKEN_FILE = BASE / "token"
+from paths import CODE_ROOT, STATE_ROOT, runtime_path
+
+BASE = CODE_ROOT
+CATALOG = runtime_path("catalog.json")
+CONFIGS = runtime_path("configs")
+LOGS = runtime_path("logs")
+TOKEN_FILE = Path(os.environ.get("STRATA_CONSOLE_TOKEN_FILE", str(runtime_path("token"))))
 HOST = os.environ.get("STRATA_CONSOLE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("STRATA_CONSOLE_PORT", "8090"))
 START_TIMEOUT = 420
@@ -38,7 +40,7 @@ SYSTEM_SERVICE = os.environ.get("STRATA_CONSOLE_SYSTEM_SERVICE", "0") == "1"
 
 lock = threading.Lock()
 try:
-    active: str | None = state_store.load_or_migrate("catalog", CATALOG, {"default_model": None}).get("default_model")
+    active: str | None = state_store.load_or_migrate("catalog", CATALOG, {"version": 1, "models": [], "default_model": None}).get("default_model")
 except (OSError, ValueError, TypeError):
     active = None
 jobs: dict[str, dict] = {}
@@ -151,7 +153,8 @@ def ensure_unit(entry: dict, cat: dict) -> str:
     if path.exists():
         return unit
     cfg_path = safe_child(CONFIGS, Path(entry["config"]).name)
-    root = Path(cat["engine_root"]).expanduser().resolve()
+    raw_root = Path(cat["engine_root"]).expanduser()
+    root = (STATE_ROOT / raw_root).resolve() if not raw_root.is_absolute() else raw_root.resolve()
     if not root.is_dir():
         raise ValueError(f"engine_root no existe: {root}")
     python_bin = root / ".venv" / "bin" / "python"

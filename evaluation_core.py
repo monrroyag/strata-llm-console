@@ -16,7 +16,7 @@ from pathlib import Path
 
 import job_core
 import optimize_core
-from console_core import BASE, find, safe_child, switch_to, systemctl, unit_name, validate_model_id
+from console_core import CONFIGS, find, safe_child, switch_to, systemctl, unit_name, validate_model_id
 
 _LOCK = threading.Lock()
 _ACTIVE: str | None = None
@@ -181,7 +181,7 @@ def run(job_id: str, cat: dict, model_id: str, context: int, profile: str, runs:
     if not entry:
         with _LOCK: _ACTIVE = None
         raise ValueError("modelo desconocido")
-    path = safe_child(BASE / "configs", Path(entry["config"]).name)
+    path = safe_child(CONFIGS, Path(entry["config"]).name)
     original = path.read_text(encoding="utf-8")
     candidates = _candidates(context, profile, entry)
     if not candidates:
@@ -257,7 +257,7 @@ def apply_result(job_id: str, candidate_index: int, cat: dict):
     entry = find(cat, model_id)
     if not entry:
         raise ValueError("modelo de la evaluación ya no existe")
-    path = safe_child(BASE / "configs", Path(entry["config"]).name)
+    path = safe_child(CONFIGS, Path(entry["config"]).name)
     backup = path.with_suffix(".json.before-evaluation-apply")
     backup.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
     _apply_config(path, selected["config"])

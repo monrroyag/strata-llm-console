@@ -63,28 +63,26 @@ if [[ -e "$INSTALL_ROOT" || -L "$INSTALL_ROOT" ]]; then
   mv "$INSTALL_ROOT" "$INSTALL_ROOT.previous"
 fi
 mv "$INSTALL_ROOT.new" "$INSTALL_ROOT"
-
-# The application keeps its existing paths, but they now point to durable state.
-for item in catalog.json configs data logs token; do
-  rm -rf "$INSTALL_ROOT/$item"
-  ln -s "$STATE_ROOT/$item" "$INSTALL_ROOT/$item"
-done
-if ! PYTHONPATH="$INSTALL_ROOT" python3 - <<'PY'
-from console_core import load_catalog
-from update_core import ensure_engine
-result = ensure_engine(load_catalog())
-print("Strata checkout:", result.get("root"))
-if result.get("model_setup_required"):
-    print("Strata source installed; run the explicit Strata setup/model selection before starting inference.")
-PY
-then
-  echo 'Warning: Strata could not be installed automatically; use the Update panel after network access is available.' >&2
+mkdir -p "$INSTALL_ROOT/data"
+if [[ -f "$STATE_ROOT/data/params_help.json" ]]; then
+  cp "$STATE_ROOT/data/params_help.json" "$INSTALL_ROOT/data/params_help.json"
 fi
+
+# The runtime state is selected through STRATA_CONSOLE_STATE_DIR; keep the
+# replaceable code tree free of state symlinks.
+cat > "$BIN_DIR/strata-console" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$INSTALL_ROOT"
+exec python3 cli.py "\$@"
+EOF
+chmod 0755 "$BIN_DIR/strata-console"
 
 cat > "$BIN_DIR/strata-llm-console" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$INSTALL_ROOT"
+if [[ "\${1:-}" == serve ]]; then shift; fi
 exec python3 console_server.py "\$@"
 EOF
 chmod 0755 "$BIN_DIR/strata-llm-console"
@@ -98,6 +96,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_ROOT
+Environment=STRATA_CONSOLE_STATE_DIR=$STATE_ROOT
+Environment=STRATA_CONSOLE_TOKEN_FILE=$STATE_ROOT/token
 ExecStart=/usr/bin/python3 $INSTALL_ROOT/console_server.py
 Restart=on-failure
 RestartSec=3
@@ -128,4 +128,4 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload >/dev/
 else
   printf 'Installed at %s\nStart with: %s\n' "$INSTALL_ROOT" "$BIN_DIR/strata-llm-console"
 fi
-printf 'Runtime state: %s\nCommand: %s\n' "$STATE_ROOT" "$BIN_DIR/strata-llm-console"
+printf 'Runtime state: %s\nCLI: %s\nServer wrapper: %s\n' "$STATE_ROOT" "$BIN_DIR/strata-console" "$BIN_DIR/strata-llm-console"
