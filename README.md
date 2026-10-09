@@ -141,7 +141,7 @@ The package contains the console only. Strata engine binaries, GGUF files, model
 Each tagged release also includes a native `.deb` package. It installs the console under `/opt/strata-llm-console`, keeps runtime state under `/var/lib/strata-llm-console`, creates a hardened system service and preserves state across package upgrades:
 
 ```bash
-VERSION=v0.3.1
+VERSION=v0.3.2
 curl -fL -o /tmp/strata-llm-console.deb \
   "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_all.deb"
 curl -fL -o /tmp/strata-llm-console.deb.sha256 \

@@ -4,8 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     STRATA_CONSOLE_HOST=127.0.0.1 \
     STRATA_CONSOLE_PORT=8090 \
-    STRATA_CONSOLE_STATE_DIR=/var/lib/strata-console \
-    STRATA_CONSOLE_TOKEN_FILE=/var/lib/strata-console/token
+    STRATA_CONSOLE_STATE_DIR=/var/lib/strata-console
 
 WORKDIR /app
 COPY backend_core.py connection_core.py console_core.py console_server.py history_core.py job_core.py evaluation_core.py cli.py runtime_drivers.py paths.py ./

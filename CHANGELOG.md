@@ -2,6 +2,10 @@
 
 All notable changes to Strata LLM Console are documented here.
 
+## 0.3.2 — 2026-10-09
+
+- Derive the container token path from `STRATA_CONSOLE_STATE_DIR` without declaring a token-like Docker environment variable.
+
 ## 0.3.1 — 2026-10-09
 
 - Fix recursive initialization of the persistent Docker runtime volume during image build.
