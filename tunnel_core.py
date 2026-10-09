@@ -29,8 +29,12 @@ def _save(st: dict) -> None:
 
 
 def _load() -> dict:
-    if STATE.exists():
-        return json.loads(STATE.read_text(encoding="utf-8"))
+    try:
+        if STATE.exists():
+            data = json.loads(STATE.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
     return {}
 
 
@@ -73,18 +77,21 @@ def set_api_key_on_models(key: str) -> list[str]:
     return touched
 
 
-def status() -> dict:
+def status(public: bool = False) -> dict:
     st = _load()
     running = _proc is not None and _proc.poll() is None
     if not running and st.get("pid"):
         try:
-            os.kill(st["pid"], 0)
-            running = True  # sobrevivió a un reinicio de la consola
-        except OSError:
+            os.kill(int(st["pid"]), 0)
+            running = True
+        except (OSError, ValueError):
             st["url"] = None
+            st.pop("pid", None)
             _save(st)
     st["running"] = running
     st["api_key_set"] = api_key_set()
+    if public:
+        return {key: st.get(key) for key in ("running", "url", "started_at", "api_key_set")}
     return st
 
 
@@ -94,10 +101,10 @@ def start(port: int = 8090, force_key: bool = True) -> dict:
         st = _load()
         if st.get("running") or (_proc and _proc.poll() is None):
             return {"status": "already_running", "url": st.get("url")}
+        generated_key = None
         if not api_key_set() and force_key:
-            key = secrets.token_urlsafe(24)
-            touched = set_api_key_on_models(key)
-            st["generated_api_key"] = key
+            generated_key = secrets.token_urlsafe(32)
+            touched = set_api_key_on_models(generated_key)
             st["key_files"] = touched
         binary = ensure_binary()
         LOGF.parent.mkdir(exist_ok=True)
@@ -121,8 +128,8 @@ def start(port: int = 8090, force_key: bool = True) -> dict:
         st["url"] = url
         _save(st)
         out = {"status": "started" if url else "starting", "url": url, "pid": _proc.pid}
-        if st.get("generated_api_key"):
-            out["api_key_generated"] = st["generated_api_key"]
+        if generated_key:
+            out["api_key_generated"] = generated_key
             out["note"] = ("se generó una API key para los modelos (archivos: "
                            + ", ".join(st.get("key_files", [])) + "). Los modelos deben "
                            "reiniciarse para exigirla; el cliente remoto la envía como "

@@ -6,13 +6,29 @@ escribe un drop-in systemd y conserva la autenticación para clientes remotos.
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 STATE = BASE / "data" / "connection.json"
-UNIT_DIR = Path.home() / ".config" / "systemd" / "user" / "hermes-strata-console.service.d"
+DEFAULT_SERVICE = os.environ.get("STRATA_CONSOLE_SERVICE", "strata-llm-console.service")
+
+
+def service_name() -> str:
+    configured = os.environ.get("STRATA_CONSOLE_SERVICE")
+    if configured:
+        return configured
+    for candidate in ("strata-llm-console.service", "hermes-strata-console.service"):
+        result = subprocess.run(["systemctl", "--user", "is-active", candidate],
+                                capture_output=True, text=True, check=False)
+        if result.returncode == 0:
+            return candidate
+    return DEFAULT_SERVICE
+
+
+UNIT_DIR = Path.home() / ".config" / "systemd" / "user" / f"{service_name()}.d"
 OVERRIDE = UNIT_DIR / "network.conf"
 
 
@@ -76,8 +92,9 @@ def apply(mode, cors=False):
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=False,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return {"status": "saved", "mode": mode, "cors": bool(cors),
+            "service": service_name(),
             "restart_required": True,
-            "note": "La conexión se aplicará al reiniciar hermes-strata-console."}
+            "note": "La conexión se aplicará al reiniciar el servicio de la consola."}
 
 
 def remote_allowed(client_ip: str, auth_ok: bool) -> bool:

@@ -11,13 +11,15 @@ trap 'rm -rf "$STAGE"' EXIT
 
 mkdir -p "$STAGE/$NAME" "$OUT"
 cd "$ROOT"
-cp backend_core.py connection_core.py console_core.py console_server.py history_core.py \
+cp backend_core.py connection_core.py console_core.py console_server.py history_core.py job_core.py evaluation_core.py \
    optimize_core.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py \
    catalog.json .gitignore README.md telegram-control.env.example \
    telegram-control.service.example "$STAGE/$NAME/"
 cp -r configs web "$STAGE/$NAME/"
-mkdir -p "$STAGE/$NAME/docs"
-cp -r docs/languages "$STAGE/$NAME/docs/"
+cp -r schemas "$STAGE/$NAME/"
+mkdir -p "$STAGE/$NAME/docs" "$STAGE/$NAME/data"
+cp -r docs/languages docs/api "$STAGE/$NAME/docs/"
+cp data/params_help.json "$STAGE/$NAME/data/"
 
 # Reproducible archive: no local ownership, timestamps or filesystem order.
 tar -C "$STAGE" --sort=name --mtime='UTC 1970-01-01' \

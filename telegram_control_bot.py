@@ -22,7 +22,7 @@ BASE = Path(__file__).resolve().parent
 API = os.environ.get("STRATA_CONSOLE_API", "http://127.0.0.1:8090")
 TOKEN = os.environ.get("TELEGRAM_STRATA_BOT_TOKEN", "")
 ADMIN_IDS = {x.strip() for x in os.environ.get("TELEGRAM_STRATA_ADMIN_IDS", "").split(",") if x.strip()}
-CONSOLE_TOKEN = (BASE / "token").read_text(encoding="utf-8").strip() if (BASE / "token").exists() else ""
+ADMIN_CHAT_IDS = {x.strip() for x in os.environ.get("TELEGRAM_STRATA_CHAT_IDS", "").split(",") if x.strip()}
 OFFSET_FILE = BASE / "data" / "telegram-offset"
 LANG_FILE = BASE / "data" / "telegram-languages.json"
 LANGS = {"es": "🇪🇸 Español", "en": "🇬🇧 English", "pt": "🇧🇷 Português", "fr": "🇫🇷 Français", "de": "🇩🇪 Deutsch"}
@@ -66,16 +66,27 @@ def tg(method: str, payload: dict | None = None) -> dict:
     return data.get("result")
 
 
+def console_token() -> str:
+    try:
+        return (BASE / "token").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def local(path: str, body: dict | None = None) -> dict:
     req = urllib.request.Request(API + path, data=json.dumps(body).encode() if body is not None else None,
-                                 headers={"X-Strata-Token": CONSOLE_TOKEN, "Content-Type": "application/json"},
+                                 headers={"X-Strata-Token": console_token(), "Content-Type": "application/json"},
                                  method="POST" if body is not None else "GET")
     with urllib.request.urlopen(req, timeout=35) as resp:
         return json.loads(resp.read())
 
 
-def allowed(chat_id) -> bool:
-    return str(chat_id) in ADMIN_IDS
+def allowed(chat_id, user_id=None) -> bool:
+    if user_id is None or str(user_id) not in ADMIN_IDS:
+        return False
+    chat = str(chat_id)
+    # Private chats are safe when the user id is allowlisted. Groups need an explicit chat allowlist.
+    return chat == str(user_id) or chat in ADMIN_CHAT_IDS
 
 
 def safe(value) -> str:
@@ -235,7 +246,8 @@ def handle(update):
     msg = update.get("message") or {}
     cb = update.get("callback_query")
     chat_id = (cb or {}).get("message", msg).get("chat", {}).get("id")
-    if chat_id is None or not allowed(chat_id):
+    actor_id = ((cb or {}).get("from") or msg.get("from") or {}).get("id")
+    if chat_id is None or not allowed(chat_id, actor_id):
         if chat_id is not None: send(chat_id, "⛔ " + tx(chat_id, "unauthorized"))
         return
     if cb: return callback(chat_id, cb.get("data", ""), cb.get("id"))

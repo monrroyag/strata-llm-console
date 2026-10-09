@@ -33,18 +33,28 @@ def _load_once():
     _loaded = True
     try:
         latest = {}
-        for line in STORE.read_text(encoding="utf-8").splitlines()[-MAX_TRACES * 20:]:
-            row = json.loads(line)
+        from collections import deque as _deque
+        lines = _deque(maxlen=MAX_TRACES * 20)
+        with STORE.open("r", encoding="utf-8") as fh:
+            lines.extend(fh)
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
             if isinstance(row, dict) and row.get("id"):
                 latest[row["id"]] = row
-        for row in list(latest.values())[-MAX_TRACES:]:
-            _recent.append(row)
+        rows = sorted(latest.values(), key=lambda item: item.get("started_at", 0))[-MAX_TRACES:]
+        _recent.extend(rows)
     except (OSError, ValueError):
         pass
 
 
 def _persist(row):
     STORE.parent.mkdir(parents=True, exist_ok=True)
+    if not STORE.exists():
+        STORE.touch(mode=0o600)
+    STORE.chmod(0o600)
     with STORE.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     if STORE.stat().st_size > 8_000_000:
@@ -123,6 +133,7 @@ def finish(trace_id, status=200, payload=None, error=None):
                     elif item.get("type") == "message":
                         row["response"] = _clip("".join(p.get("text", "") for p in item.get("content", [])))
         _persist(row)
+        _sse_buffers.pop(trace_id, None)
 
 
 _sse_buffers: dict[str, str] = {}
@@ -133,6 +144,8 @@ def append_sse(trace_id, raw):
         text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
         with _lock:
             text = _sse_buffers.get(trace_id, "") + text
+            if len(text) > MAX_TEXT * 2:
+                text = text[-MAX_TEXT * 2:]
             lines = text.splitlines(keepends=True)
             _sse_buffers[trace_id] = lines.pop() if lines and not lines[-1].endswith(("\n", "\r")) else ""
         for line in lines:

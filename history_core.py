@@ -6,6 +6,8 @@ El fit check estima si un GGUF cabe en la 3090 + RAM antes de darle alta."""
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 import time
 from pathlib import Path
 
@@ -14,6 +16,13 @@ HIST = BASE / "data" / "history"
 HIST.mkdir(parents=True, exist_ok=True)
 
 MAX_ROWS = 5000
+MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+def _history_path(mid: str) -> Path:
+    if not MODEL_ID_RE.fullmatch(str(mid or "")):
+        raise ValueError("modelo inválido")
+    return HIST / f"{mid}.jsonl"
 
 
 def _setup_snapshot(entry: dict, cat: dict) -> dict:
@@ -53,7 +62,7 @@ def record(entry: dict, metrics: dict) -> None:
            "spec": eng.get("spec"), "mtp_max": eng.get("mtp_max"),
            "requests": len(metrics.get("requests") or []),
            "setup": _setup_snapshot(entry, {})}
-    path = HIST / f"{entry['id']}.jsonl"
+    path = _history_path(entry["id"])
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     # recorte simple: si pasa el tope, conservar los últimos MAX_ROWS
@@ -63,7 +72,7 @@ def record(entry: dict, metrics: dict) -> None:
 
 
 def history(mid: str, since: int = 0, limit: int = 500) -> list[dict]:
-    path = HIST / f"{mid}.jsonl"
+    path = _history_path(mid)
     if not path.exists():
         return []
     rows = []
@@ -119,12 +128,18 @@ def fit_check(gguf_paths: list[str], max_context: int = 200000, kv: str = "q4_0"
     except Exception:
         ram_avail_gib = ram_total_gib = None
     disk_free_gib = shutil.disk_usage(str(BASE)).free / 2**30
-    vram_total_gib = 24.0  # RTX 3090
+    try:
+        raw = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=8)
+        vram_total_gib = max(int(line.strip()) for line in raw.stdout.splitlines() if line.strip()) / 1024
+    except (OSError, ValueError, subprocess.SubprocessError):
+        vram_total_gib = None
     need_ram = weights_gib * 1.15 + kv_gib * 0.3
-    fits = (ram_avail_gib is None) or (need_ram <= ram_avail_gib)
+    fits_ram = (ram_avail_gib is None) or (need_ram <= ram_avail_gib)
+    fits_vram = vram_total_gib is None or kv_gib <= vram_total_gib
+    fits = fits_ram and fits_vram
     return {"weights_gib": round(weights_gib, 2), "kv_est_gib": round(kv_gib, 2),
             "ram_total_gib": round(ram_total_gib or 0, 1), "ram_avail_gib": round(ram_avail_gib or 0, 1),
-            "ram_needed_est_gib": round(need_ram, 1), "vram_total_gib": vram_total_gib,
+            "ram_needed_est_gib": round(need_ram, 1), "vram_total_gib": round(vram_total_gib, 1) if vram_total_gib is not None else None,
             "disk_free_gib": round(disk_free_gib, 1),
             "fits": fits,
             "verdict": ("cabe holgado" if fits and need_ram < (ram_avail_gib or 99) * 0.7 else

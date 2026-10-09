@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import json
 import secrets
+import subprocess
 import threading
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from console_core import (BASE, CATALOG, CONFIGS, HOST, LOGS, PORT, TOKEN_FILE,
-                          detail_of, get_active, gpu_state, http_json, model_ids, ram_state,
-                          save_catalog, slug, status_of, switch_to,
+                          MAX_BODY_BYTES, detail_of, get_active, gpu_state, http_json, model_ids, ram_state,
+                          save_catalog, slug, status_of, switch_to, validate_model_id, safe_child,
                           systemctl, unit_name, load_catalog, find)
 import history_core
 import tunnel_core
@@ -21,9 +23,38 @@ import optimize_core
 import trace_core
 import connection_core
 import backend_core
+import job_core
+import evaluation_core
 
 UI = BASE / "web"
+OPENAPI = BASE / "docs" / "api" / "openapi.json"
 PARAMS_HELP = BASE / "data" / "params_help.json"
+MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+
+
+def token() -> str:
+    """Return a non-empty private token, creating it atomically on first use."""
+    try:
+        current = TOKEN_FILE.read_text(encoding="utf-8").strip()
+        if current:
+            return current
+    except OSError:
+        pass
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    value = secrets.token_urlsafe(32)
+    tmp = TOKEN_FILE.with_name(f".{TOKEN_FILE.name}.{secrets.token_hex(6)}.tmp")
+    tmp.write_text(value + "\n", encoding="utf-8")
+    tmp.chmod(0o600)
+    tmp.replace(TOKEN_FILE)
+    return value
+
+
+def query(path: str) -> dict[str, list[str]]:
+    return parse_qs(urlsplit(path).query, keep_blank_values=True)
+
+
+def first_query(path: str, key: str, default: str | None = None) -> str | None:
+    return query(path).get(key, [default])[0]
 
 # banderas engine soportadas por /api/config (key -> flag, tipo)
 ENGINE_FLAGS = {
@@ -64,15 +95,6 @@ def sampler_loop():
 threading.Thread(target=sampler_loop, daemon=True).start()
 
 
-def token() -> str:
-    if TOKEN_FILE.exists():
-        return TOKEN_FILE.read_text().strip()
-    t = secrets.token_urlsafe(24)
-    TOKEN_FILE.write_text(t)
-    TOKEN_FILE.chmod(0o600)
-    return t
-
-
 def authorized(handler: BaseHTTPRequestHandler) -> bool:
     sent = handler.headers.get("X-Strata-Token") or ""
     if not sent:
@@ -88,13 +110,15 @@ def jbytes(v) -> bytes:
 
 def add_model(cat: dict, req: dict) -> dict:
     gguf = Path(req["gguf_path"]).expanduser()
-    if not gguf.exists():
-        raise ValueError(f"no existe la ruta del GGUF: {gguf}")
-    mid = (req.get("id") or slug(gguf.stem)).strip()
+    if not gguf.exists() or not gguf.is_file() or gguf.stat().st_size <= 0:
+        raise ValueError(f"GGUF inexistente o vacío: {gguf}")
+    mid = validate_model_id(req.get("id") or slug(gguf.stem))
     if mid in model_ids(cat):
         raise ValueError(f"ya existe un modelo con id {mid}")
     ports = {int(m["port"]) for m in cat["models"]}
     port = int(req.get("port") or max([8080] + list(ports)) + 1)
+    if not 1024 <= port <= 65535 or port == PORT:
+        raise ValueError(f"puerto inválido o reservado: {port}")
     if port in ports:
         raise ValueError(f"puerto {port} ya en uso por otro modelo")
     pack = req.get("pack") or str(gguf.parent / f"pack-{slug(mid)}")
@@ -140,8 +164,8 @@ def remove_model(cat: dict, mid: str) -> dict:
     systemctl("stop", unit_name(entry))
     if entry.get("legacy_unit"):
         systemctl("stop", entry["legacy_unit"])
-    cfg = BASE / entry["config"]
-    if cfg.exists() and str(cfg.resolve()).startswith(str(CONFIGS.resolve())):
+    cfg = safe_child(CONFIGS, Path(entry["config"]).name)
+    if cfg.exists() and cfg.is_file():
         cfg.unlink()
     # Solo se elimina el unit generado por la consola; nunca el legacy ni GGUF/pack.
     generated = Path.home() / ".config" / "systemd" / "user" / f"{unit_name(entry)}.service"
@@ -165,6 +189,18 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *a):
         print(fmt % a, flush=True)
 
+    def remote_guard(self) -> bool:
+        if connection_core.remote_allowed(self.client_address[0], authorized(self)):
+            return True
+        self.send_json(401, {"error": {"type": "authentication_error", "message": "token requerido para clientes remotos"}})
+        return False
+
+    def control_guard(self) -> bool:
+        if authorized(self):
+            return True
+        self.send_json(401, {"error": {"type": "authentication_error", "message": "token requerido"}})
+        return False
+
     def end_headers(self):
         if connection_core.status(HOST, PORT, TOKEN_FILE).get("cors"):
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -185,12 +221,21 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def read_body(self) -> bytes:
-        return self.rfile.read(int(self.headers.get("Content-Length", "0") or 0))
+        raw_length = self.headers.get("Content-Length", "0") or "0"
+        try:
+            length = int(raw_length)
+        except ValueError as exc:
+            raise ValueError("Content-Length inválido") from exc
+        if length < 0 or length > MAX_BODY_BYTES:
+            raise ValueError(f"cuerpo demasiado grande: máximo {MAX_BODY_BYTES} bytes")
+        return self.rfile.read(length)
 
     # ---- proxy hacia el modelo activo ----
     def proxy(self, path: str, body: bytes | None):
         if not connection_core.remote_allowed(self.client_address[0], authorized(self)):
             return self.send_json(401, {"error": {"type": "authentication_error", "message": "token requerido para clientes remotos"}})
+        if evaluation_core.is_blocked():
+            return self.send_json(423, {"error": {"code": "EVALUATION_IN_PROGRESS", "message": "el modelo está bloqueado durante la evaluación", "job_id": evaluation_core.active_job()}})
         cat = load_catalog()
         mid = None
         if body:
@@ -297,15 +342,22 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {"object": "list",
                                  "data": [{"id": m, "object": "model"} for m in model_ids(cat)]})
             return
-        if p in ("/health", "/api/status"):
+        if p == "/health":
+            self.send_json(200, {"status": "ok"})
+            return
+        if p == "/api/status":
+            if not self.remote_guard():
+                return
             cat = load_catalog()
             self.send_json(200, {"status": "ok", "active_model": get_active(),
                                  "models": [status_of(m) for m in cat["models"]],
                                  "gpu": gpu_state(), "ram": ram_state()})
             return
         if p == "/api/detail":
+            if not self.remote_guard():
+                return
             cat = load_catalog()
-            mid = (self.path.split("model=")[1] if "model=" in self.path else None) or cat.get("default_model")
+            mid = first_query(self.path, "model") or cat.get("default_model")
             e = find(cat, mid)
             if not e:
                 self.send_json(404, {"error": {"message": f"modelo desconocido: {mid}"}})
@@ -313,13 +365,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, detail_of(e))
             return
         if p == "/api/config-get":
+            if not self.remote_guard():
+                return
             cat = load_catalog()
-            mid = (self.path.split("model=")[1] if "model=" in self.path else None) or cat.get("default_model")
+            mid = first_query(self.path, "model") or cat.get("default_model")
             e = find(cat, mid)
             if not e:
                 self.send_json(404, {"error": {"message": f"modelo desconocido: {mid}"}})
                 return
-            cfg = json.loads((BASE / e["config"]).read_text(encoding="utf-8"))
+            cfg = json.loads(safe_child(CONFIGS, Path(e["config"]).name).read_text(encoding="utf-8"))
             args = cfg.get("args", [])
             def flag(f):
                 return args[args.index(f) + 1] if f in args else None
@@ -337,10 +391,17 @@ class Handler(BaseHTTPRequestHandler):
                                             "parallel": cfg.get("parallel")}})
             return
         if p == "/api/optimize":
-            q = dict(kv.split("=", 1) for kv in self.path.split("?", 1)[1].split("&") if "=" in kv) if "?" in self.path else {}
-            ctx = int(q.get("context", 200000))
-            entry = find(load_catalog(), q.get("model")) if q.get("model") else None
-            self.send_json(200, optimize_core.optimize(ctx, q.get("profile", "balanced"), entry=entry))
+            if not self.remote_guard():
+                return
+            q = query(self.path)
+            try:
+                ctx = int(q.get("context", ["200000"])[0])
+            except (TypeError, ValueError):
+                self.send_json(400, {"error": {"code": "INVALID_CONTEXT", "message": "context debe ser un entero"}})
+                return
+            model = q.get("model", [""])[0]
+            entry = find(load_catalog(), model) if model else None
+            self.send_json(200, optimize_core.optimize(ctx, q.get("profile", ["balanced"])[0], entry=entry))
             return
         if p == "/api/traces":
             if not authorized(self):
@@ -356,24 +417,81 @@ class Handler(BaseHTTPRequestHandler):
             item = trace_core.get(p.rsplit("/", 1)[-1])
             self.send_json(200 if item else 404, item or {"error": {"message": "traza no encontrada"}})
             return
+        if p.startswith("/api/evaluations/"):
+            if not self.remote_guard():
+                return
+            evaluation_id = p.rsplit("/", 1)[-1]
+            item = job_core.get(evaluation_id)
+            self.send_json(200 if item else 404, item or {"error": {"code": "EVALUATION_NOT_FOUND", "message": "evaluación no encontrada"}})
+            return
+        if p == "/api/jobs":
+            if not self.remote_guard():
+                return
+            try:
+                limit = max(1, min(int(first_query(self.path, "limit", "50") or 50), 100))
+            except ValueError:
+                self.send_json(400, {"error": {"code": "INVALID_LIMIT", "message": "limit debe ser un entero"}})
+                return
+            self.send_json(200, {"jobs": job_core.list_jobs(limit)})
+            return
+        if p.startswith("/api/jobs/"):
+            if not self.remote_guard():
+                return
+            job_id = p.rsplit("/", 1)[-1]
+            item = job_core.get(job_id)
+            self.send_json(200 if item else 404, item or {"error": {"code": "JOB_NOT_FOUND", "message": "job no encontrado"}})
+            return
+        if p == "/api/openapi.json":
+            if not self.remote_guard():
+                return
+            if not OPENAPI.is_file():
+                self.send_json(503, {"error": {"code": "OPENAPI_MISSING", "message": "falta el contrato OpenAPI"}})
+                return
+            self.send_json(200, json.loads(OPENAPI.read_text(encoding="utf-8")))
+            return
         if p == "/api/params-help":
+            if not self.remote_guard():
+                return
+            if not PARAMS_HELP.is_file():
+                self.send_json(503, {"error": {"code": "PARAMETER_SCHEMA_MISSING", "message": "falta el esquema de parámetros"}})
+                return
             self.send_json(200, json.loads(PARAMS_HELP.read_text(encoding="utf-8")))
             return
         if p == "/api/history":
-            q = dict(kv.split("=", 1) for kv in self.path.split("?", 1)[1].split("&") if "=" in kv) if "?" in self.path else {}
-            mid = q.get("model") or load_catalog().get("default_model")
-            since = int(q.get("since", 0))
+            if not self.remote_guard():
+                return
+            q = query(self.path)
+            mid = q.get("model", [load_catalog().get("default_model")])[0]
+            try:
+                mid = validate_model_id(mid)
+            except ValueError:
+                self.send_json(400, {"error": {"code": "INVALID_MODEL_ID", "message": "modelo inválido"}})
+                return
+            try:
+                since = int(q.get("since", ["0"])[0])
+            except ValueError:
+                self.send_json(400, {"error": {"code": "INVALID_SINCE", "message": "since debe ser un entero"}})
+                return
             self.send_json(200, {"model": mid, "rows": history_core.history(mid, since)})
             return
         if p == "/api/history-compare":
-            q = dict(kv.split("=", 1) for kv in self.path.split("?", 1)[1].split("&") if "=" in kv) if "?" in self.path else {}
-            mid = q.get("model") or load_catalog().get("default_model")
+            if not self.remote_guard():
+                return
+            q = query(self.path)
+            mid = q.get("model", [load_catalog().get("default_model")])[0]
+            try:
+                mid = validate_model_id(mid)
+            except ValueError:
+                self.send_json(400, {"error": {"code": "INVALID_MODEL_ID", "message": "modelo inválido"}})
+                return
             self.send_json(200, {"model": mid, "setups": history_core.compare_setups(mid)})
             return
         if p == "/api/update-status":
+            if not self.remote_guard():
+                return
             cat = load_catalog()
-            info = update_core.check_update(cat, fetch=("fresh" in self.path))
-            info["engine_version"] = update_core.engine_version(cat["engine_root"])
+            info = update_core.check_update(cat, fetch=(first_query(self.path, "fresh", "0") == "1"))
+            info["engine_version"] = update_core.engine_version(cat.get("engine_root", ""))
             self.send_json(200, info)
             return
         if p == "/api/backends":
@@ -389,7 +507,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, connection_core.status(HOST, PORT, TOKEN_FILE))
             return
         if p == "/api/tunnel-status":
-            self.send_json(200, tunnel_core.status())
+            if not self.remote_guard():
+                return
+            self.send_json(200, tunnel_core.status(public=True))
             return
         if p == "/api/catalog":
             if not authorized(self):
@@ -405,12 +525,19 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         p = self.path.split("?")[0]
         if p in ("/v1/chat/completions", "/v1/messages", "/v1/responses", "/v1/embeddings"):
-            self.proxy(self.path, self.read_body())
+            try:
+                body = self.read_body()
+            except ValueError as exc:
+                return self.send_json(413, {"error": {"type": "request_too_large", "message": str(exc)}})
+            self.proxy(self.path, body)
             return
-        if not authorized(self):
-            self.send_json(401, {"error": {"message": "token requerido"}})
+        if not self.control_guard():
             return
-        body = self.read_body()
+        try:
+            body = self.read_body()
+        except ValueError as exc:
+            self.send_json(413, {"error": {"type": "request_too_large", "message": str(exc)}})
+            return
         try:
             req = json.loads(body or b"{}")
         except ValueError:
@@ -418,9 +545,38 @@ class Handler(BaseHTTPRequestHandler):
             return
         cat = load_catalog()
         try:
-            if p == "/api/select":
-                port = switch_to(req["model"], cat)
-                self.send_json(200, {"status": "ok", "active_model": req["model"], "port": port})
+            if p.startswith("/api/evaluations/") and p.endswith("/apply"):
+                evaluation_id = p.split("/")[-2]
+                try:
+                    selected = evaluation_core.apply_result(evaluation_id, int(req.get("candidate_index")), cat)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(str(exc)) from exc
+                self.send_json(200, selected)
+            elif p == "/api/evaluations":
+                try:
+                    context = max(4096, min(int(req.get("context", 200000)), 262144))
+                    runs = max(1, min(int(req.get("runs", 3)), 8))
+                    long_chars = max(1024, min(int(req.get("long_prompt_chars", 120000)), 500000))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("context, runs y long_prompt_chars deben ser enteros") from exc
+                model = req.get("model") or cat.get("default_model") or get_active()
+                if not model:
+                    raise ValueError("selecciona un modelo para evaluar")
+                job = evaluation_core.submit(cat, model, context, str(req.get("profile", "balanced")), runs, long_chars,
+                                              self.headers.get("Idempotency-Key"))
+                self.send_json(202, {"status": job["status"], "job_id": job["id"]})
+            elif p.startswith("/api/jobs/") and p.endswith("/cancel"):
+                job_id = p.split("/")[-2]
+                self.send_json(200 if job_core.cancel(job_id) else 409, {"job_id": job_id, "status": "cancel_requested"})
+            elif p == "/api/select":
+                model = validate_model_id(req.get("model"))
+                if not find(cat, model):
+                    raise ValueError(f"modelo desconocido: {model}")
+                key = self.headers.get("Idempotency-Key")
+                job = job_core.submit("model.select", {"model": model},
+                                       lambda _job_id: {"active_model": model, "port": switch_to(model, cat)},
+                                       key)
+                self.send_json(202, {"status": job["status"], "job_id": job["id"]})
             elif p == "/api/stop":
                 e = find(cat, req["model"])
                 if not e:
@@ -447,7 +603,9 @@ class Handler(BaseHTTPRequestHandler):
                 e = find(cat, req["model"])
                 if not e:
                     raise ValueError(f"modelo desconocido: {req['model']}")
-                path = BASE / e["config"]
+                path = safe_child(CONFIGS, Path(e["config"]).name)
+                if not path.is_file():
+                    raise ValueError("configuración de modelo no encontrada")
                 cfg = json.loads(path.read_text(encoding="utf-8"))
                 cfg.setdefault("sampling", {}).update(req.get("sampling") or {})
                 for k in ("reasoning_budget_tokens", "fit_max_tokens", "idle_unload_s",
@@ -481,16 +639,22 @@ class Handler(BaseHTTPRequestHandler):
                 save_catalog(cat)
                 self.send_json(200, {"status": "ok", "default_model": req["model"]})
             elif p == "/api/update":
-                self.send_json(200, update_core.do_update(cat))
+                key = self.headers.get("Idempotency-Key")
+                job = job_core.submit("engine.update", {}, lambda _job_id: update_core.do_update(cat), key)
+                self.send_json(202, {"status": job["status"], "job_id": job["id"]})
             elif p == "/api/update-revert":
                 self.send_json(200, update_core.revert_update(cat, req["to_commit"]))
             elif p == "/api/connection":
                 result = connection_core.apply(str(req.get("mode", "local")), bool(req.get("cors", False)))
                 self.send_json(200, result)
             elif p == "/api/tunnel-start":
-                self.send_json(200, tunnel_core.start(PORT, force_key=bool(req.get("force_key", True))))
+                job = job_core.submit("tunnel.start", {"force_key": bool(req.get("force_key", True))},
+                                       lambda _job_id: tunnel_core.start(PORT, force_key=bool(req.get("force_key", True))),
+                                       self.headers.get("Idempotency-Key"))
+                self.send_json(202, {"status": job["status"], "job_id": job["id"]})
             elif p == "/api/tunnel-stop":
-                self.send_json(200, tunnel_core.stop())
+                job = job_core.submit("tunnel.stop", {}, lambda _job_id: tunnel_core.stop(), self.headers.get("Idempotency-Key"))
+                self.send_json(202, {"status": job["status"], "job_id": job["id"]})
             elif p == "/api/fit-check":
                 paths = req.get("gguf_paths") or ([req["gguf_path"]] if req.get("gguf_path") else [])
                 self.send_json(200, history_core.fit_check(paths,

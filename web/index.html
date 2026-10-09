@@ -19,23 +19,23 @@
 
   <nav class="tabs" role="tablist" aria-label="views">
     <details class="nav-group" open><summary data-t="nav_operate">Operate</summary><div class="nav-menu">
-      <button class="tab on" data-v="models" data-t="tab_models"></button>
-      <button class="tab" data-v="params" data-t="tab_params"></button>
-      <button class="tab" data-v="opt" data-t="tab_opt"></button>
+      <button role="tab" class="tab on" data-v="models" data-t="tab_models"></button>
+      <button role="tab" class="tab" data-v="params" data-t="tab_params"></button>
+      <button role="tab" class="tab" data-v="opt" data-t="tab_opt"></button>
     </div></details>
     <details class="nav-group"><summary data-t="nav_observe">Observe</summary><div class="nav-menu">
-      <button class="tab" data-v="perf" data-t="tab_perf"></button>
-      <button class="tab" data-v="traces" data-t="tab_traces"></button>
-      <button class="tab" data-v="log" data-t="tab_log"></button>
+      <button role="tab" class="tab" data-v="perf" data-t="tab_perf"></button>
+      <button role="tab" class="tab" data-v="traces" data-t="tab_traces"></button>
+      <button role="tab" class="tab" data-v="log" data-t="tab_log"></button>
     </div></details>
     <details class="nav-group"><summary data-t="nav_connect">Connect</summary><div class="nav-menu">
-      <button class="tab" data-v="connection" data-t="tab_connection"></button>
-      <button class="tab" data-v="tunnel" data-t="tab_tunnel"></button>
+      <button role="tab" class="tab" data-v="connection" data-t="tab_connection"></button>
+      <button role="tab" class="tab" data-v="tunnel" data-t="tab_tunnel"></button>
     </div></details>
     <details class="nav-group"><summary data-t="nav_system">System</summary><div class="nav-menu">
-      <button class="tab" data-v="update" data-t="tab_update"></button>
-      <button class="tab" data-v="add" data-t="tab_add"></button>
-      <button class="tab" data-v="prefs" data-t="tab_prefs"></button>
+      <button role="tab" class="tab" data-v="update" data-t="tab_update"></button>
+      <button role="tab" class="tab" data-v="add" data-t="tab_add"></button>
+      <button role="tab" class="tab" data-v="prefs" data-t="tab_prefs"></button>
     </div></details>
   </nav>
 
@@ -217,6 +217,12 @@
         </div></div>
       <p class="hint" data-t="opt_hint"></p>
       <div id="optOut"></div>
+      <div class="eval-panel">
+        <div class="sech"><h3 data-t="eval_title">Measured configuration evaluation</h3><span class="hint" data-t="eval_hint">Blocks inference while measuring short and long prompts.</span></div>
+        <div class="eval-controls"><label><span data-t="eval_runs">runs / prompt</span><input id="evalRuns" type="number" min="1" max="8" value="3"></label><label><span data-t="eval_long">long prompt characters</span><input id="evalLongChars" type="number" min="1024" max="500000" step="1024" value="120000"></label><button id="evalBtn" class="pri" data-t="eval_run">evaluate candidates</button></div>
+        <div id="evalStatus" class="callout" hidden></div>
+        <div id="evalResults" class="eval-results"></div>
+      </div>
     </div>
   </section>
 

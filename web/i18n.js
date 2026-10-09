@@ -47,7 +47,7 @@ const I18N = {
     opt_bal: "equilibrado", opt_speed: "velocidad", opt_long: "contexto largo", opt_code: "código",
     opt_run: "buscar mejor config",
     opt_hint: "elegí el contexto objetivo y el perfil; el sistema busca la mejor combinación de KV, crecimiento, MTP y lookup según la VRAM/RAM reales y la historia de rendimiento.",
-    opt_reco: "Recomendada", opt_alt: "Alternativas", opt_apply: "aplicar al modelo",
+    opt_reco: "Recomendada", opt_alt: "Alternativas", opt_apply: "aplicar al modelo", eval_title:"Evaluación medida", eval_hint:"Bloquea la inferencia durante las mediciones.", eval_runs:"ejecuciones por prompt", eval_long:"caracteres del prompt largo", eval_run:"evaluar candidatos", eval_apply:"aplicar configuración medida", eval_details:"ver métricas", eval_empty:"Todavía no hay resultados de evaluación.",
     opt_hist: "Referencia histórica", opt_est: "Estimación",
   },
   en: {
@@ -97,7 +97,7 @@ const I18N = {
     opt_bal: "balanced", opt_speed: "speed", opt_long: "long context", opt_code: "code",
     opt_run: "find best config",
     opt_hint: "set the target context and profile; the system searches the best KV / growth / MTP / lookup mix using real VRAM/RAM and past performance.",
-    opt_reco: "Recommended", opt_alt: "Alternatives", opt_apply: "apply to model",
+    opt_reco: "Recommended", opt_alt: "Alternatives", opt_apply: "apply to model", eval_title:"Measured evaluation", eval_hint:"Inference is blocked while candidates are measured.", eval_runs:"runs per prompt", eval_long:"long prompt characters", eval_run:"evaluate candidates", eval_apply:"apply measured configuration", eval_details:"view metrics", eval_empty:"No evaluation results yet.",
     opt_hist: "History reference", opt_est: "Estimate",
   },
   pt: {}, fr: {}, de: {}
@@ -107,7 +107,7 @@ I18N.pt = Object.assign({}, I18N.en, {
   trace_title:'Rastreamento de requisições',trace_refresh:'atualizar',trace_empty:'Nenhuma requisição observada.',trace_detail:'Detalhes da execução',trace_select:'Selecione uma requisição para ver raciocínio, resposta e métricas.',trace_reasoning:'Raciocínio exposto pelo modelo',trace_response:'Resposta',trace_errors:'Erros e diagnóstico',trace_prompt:'Prompt do usuário',trace_tools:'Ferramentas',trace_usage:'Uso e tempo',trace_running:'executando',trace_completed:'concluída',trace_error:'erro',
   conn_title:'Conexão e exposição',conn_refresh:'atualizar',conn_mode_label:'Modo de escuta',conn_local:'Somente este PC',conn_lan:'Rede local',conn_cors:'Permitir CORS para clientes web',conn_apply:'salvar e preparar mudança',conn_security:'A API é local por padrão. Ao abrir na rede, clientes remotos devem usar o token Bearer.',conn_urls:'Como conectar outro PC',conn_local_status:'Somente local',conn_lan_status:'Rede local ativa',conn_restart:'reinicialização do serviço necessária',
   ov_title:'Orquestração de modelos',ov_subtitle:'Um ponto de controle para Strata, Hermes e seus agentes.',ov_refresh:'atualizar estado',ov_optimize:'otimizar contexto',ov_params:'editar parâmetros',ov_active:'MODELO ATIVO',ov_context:'CONTEXTO',ov_load:'CARGA DA GPU',ov_catalog:'CATÁLOGO',ov_catalog_sub:'modelos registrados',
-  inv_title:'Inventário de modelos',params_title:'Parâmetros',save:'salvar',restart_apply:'reiniciar para aplicar',live_title:'Métricas ao vivo',hist_title:'Tendência histórica por modelo',upd_title:'Strata: versão e atualização',tun_title:'Túnel criptografado',add_title:'Cadastrar modelo',log_title:'Atividade do console',clear:'limpar',a_use:'usar',a_params:'parâmetros',a_unload:'descarregar',a_stop:'parar',st_active:'ATIVO',st_running:'executando',st_stopped:'parado',tab_opt:'Otimizador',opt_title:'Otimizador de configuração',opt_run:'buscar melhor configuração',opt_reco:'Recomendada',opt_alt:'Alternativas',opt_apply:'aplicar ao modelo'
+  inv_title:'Inventário de modelos',params_title:'Parâmetros',save:'salvar',restart_apply:'reiniciar para aplicar',live_title:'Métricas ao vivo',hist_title:'Tendência histórica por modelo',upd_title:'Strata: versão e atualização',tun_title:'Túnel criptografado',add_title:'Cadastrar modelo',log_title:'Atividade do console',clear:'limpar',a_use:'usar',a_params:'parâmetros',a_unload:'descarregar',a_stop:'parar',st_active:'ATIVO',st_running:'executando',st_stopped:'parado',tab_opt:'Otimizador',opt_title:'Otimizador de configuração',opt_run:'buscar melhor configuração',opt_reco:'Recomendada',opt_alt:'Alternativas',opt_apply:'aplicar ao modelo', eval_title:'Avaliação medida', eval_hint:'A inferência é bloqueada durante as medições.', eval_runs:'execuções por prompt', eval_long:'caracteres do prompt longo', eval_run:'avaliar candidatos', eval_apply:'aplicar configuração medida', eval_details:'ver métricas', eval_empty:'Ainda não há resultados.'
 });
 I18N.fr = Object.assign({}, I18N.en, {
   tab_models:'Modèles',tab_perf:'Performances',tab_traces:'Traçabilité',tab_connection:'Connexion',tab_params:'Paramètres',tab_update:'Mise à jour',tab_tunnel:'Tunnel',tab_add:'Ajouter',tab_log:'Activité',
@@ -134,7 +134,7 @@ function applyLang() {
         ? el.childNodes[0].textContent = txt
         : el.insertBefore(document.createTextNode(txt), el.firstChild);
       const inp = el.querySelector('input'); if (inp && ph) inp.placeholder = ph;
-    } else if (el.tagName === 'BUTTON' || el.tagName === 'TH' || el.tagName === 'SPAN' || el.tagName === 'SUMMARY' || el.tagName === 'H1' || el.tagName === 'H2' || el.tagName === 'P' || el.tagName === 'OPTION') {
+    } else if (!el.children.length) {
       el.textContent = v;
     }
   });

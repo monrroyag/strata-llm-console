@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/monrroyag/strata-llm-console/schemas/catalog.schema.json",
+  "title": "Strata Console catalog",
+  "type": "object",
+  "required": ["version", "engine_root", "models"],
+  "properties": {
+    "version": {"type": "integer", "minimum": 1},
+    "engine_root": {"type": "string", "minLength": 1},
+    "default_model": {"type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "models": {"type": "array", "items": {"$ref": "#/$defs/model"}},
+    "update": {"type": "object", "properties": {"repo_url": {"type": "string", "format": "uri"}, "branch": {"type": "string"}}}
+  },
+  "$defs": {
+    "model": {
+      "type": "object",
+      "required": ["id", "label", "port", "config"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+        "label": {"type": "string", "maxLength": 160},
+        "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "config": {"type": "string", "pattern": "^configs/[a-z0-9][a-z0-9._-]{0,63}\\.json$"},
+        "pack": {"type": "string"},
+        "gguf": {"type": "string"},
+        "unit": {"type": "string", "pattern": "^[a-zA-Z0-9_.@-]{1,160}$"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

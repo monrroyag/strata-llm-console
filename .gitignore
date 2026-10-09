@@ -9,6 +9,9 @@ token
 # Runtime state
 data/*.jsonl
 data/*.json
+data/*.sqlite*
+data/*.db*
+!data/params_help.json
 data/telegram-offset
 logs/
 __pycache__/

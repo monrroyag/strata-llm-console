@@ -13,7 +13,37 @@ env:
   IMAGE: ghcr.io/monrroyag/strata-llm-console
 
 jobs:
+  quality:
+    name: Validate source and Linux bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and test Python
+        run: |
+          python -m py_compile *.py
+          python -m unittest -v
+      - name: Validate frontend and packaging scripts
+        run: |
+          node --check web/app.js
+          node --check web/i18n.js
+          bash -n packaging/*.sh
+          python -m json.tool catalog.json >/dev/null
+          python -m json.tool data/params_help.json >/dev/null
+          python -m json.tool docs/api/openapi.json >/dev/null
+      - name: Build and inspect bundle
+        run: |
+          chmod +x packaging/build-linux-package.sh
+          VERSION=ci ./packaging/build-linux-package.sh
+          sha256sum -c dist/*.sha256
+          tar -tzf dist/*.tar.gz | grep -q '/data/params_help.json'
+          tar -tzf dist/*.tar.gz | grep -q '/docs/api/openapi.json'
+          ! tar -tzf dist/*.tar.gz | grep -E '(^|/)(token|.*\.gguf|traces\.jsonl)$'
+
   linux-bundle:
+    needs: quality
     name: Build and publish Linux bundle
     runs-on: ubuntu-latest
     steps:
@@ -37,6 +67,7 @@ jobs:
             --generate-notes
 
   container-package:
+    needs: quality
     name: Publish OCI package to GHCR
     runs-on: ubuntu-latest
     steps:

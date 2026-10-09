@@ -8,10 +8,20 @@ import json
 import subprocess
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 BASE = Path(__file__).resolve().parent
 CATALOG = BASE / "catalog.json"
+OFFICIAL_REPO = "https://github.com/Niko1221/Strata.git"
 ENGINE_INSTALL = BASE / "data" / "engine" / "Strata"
+
+
+def validate_repo_url(repo: str) -> str:
+    parsed = urlparse(repo)
+    normalized = repo.rstrip("/")
+    if parsed.scheme != "https" or parsed.netloc.lower() != "github.com" or normalized != OFFICIAL_REPO:
+        raise ValueError("solo se permite el repositorio oficial de Strata")
+    return OFFICIAL_REPO
 
 
 def ensure_engine(cat: dict) -> dict:
@@ -57,16 +67,17 @@ def engine_version(root: str) -> str | None:
 
 
 def check_update(cat: dict, fetch: bool = True) -> dict:
-    """Fetch del remoto y comparación del HEAD local; instala el repo si falta."""
-    try:
-        install = ensure_engine(cat)
-        root = cat["engine_root"]
-    except Exception as exc:
-        return {"error": str(exc), "installed": False, "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+    """Read-only version check; installation is an explicit update operation."""
+    root_path = Path(cat.get("engine_root", "")).expanduser()
+    if not root_path.is_dir() or not (root_path / ".git").exists():
+        return {"present": False, "installed": False, "update_available": False,
+                "error": "engine no instalado; usa la acción de instalación explícita",
+                "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+    root = str(root_path)
     info = {"repo_url": cat.get("update", {}).get("repo_url") or
             _git(root, "config", "--get", "remote.origin.url"),
             "branch": "main", "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "installed": install.get("installed", False)}
+            "installed": False}
     try:
         if fetch:
             _git(root, "fetch", "origin", "--quiet", timeout=180)

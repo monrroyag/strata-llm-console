@@ -6,10 +6,12 @@ propias copias de los run-configs (configs/*.json). Actualizar Strata no la toca
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import secrets
+import stat
 import subprocess
 import threading
 import time
@@ -27,6 +29,8 @@ HOST = os.environ.get("STRATA_CONSOLE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("STRATA_CONSOLE_PORT", "8090"))
 START_TIMEOUT = 420
 POLL = 2
+MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+MAX_BODY_BYTES = 8 * 1024 * 1024
 
 lock = threading.Lock()
 try:
@@ -36,11 +40,35 @@ except (OSError, ValueError, TypeError):
 jobs: dict[str, dict] = {}
 
 
+def validate_catalog(cat: dict) -> dict:
+    if not isinstance(cat, dict) or not isinstance(cat.get("models"), list):
+        raise ValueError("catálogo inválido: models debe ser una lista")
+    ids = set()
+    ports = set()
+    for model in cat["models"]:
+        mid = validate_model_id(model.get("id"))
+        if mid in ids:
+            raise ValueError(f"id duplicado en catálogo: {mid}")
+        ids.add(mid)
+        port = int(model.get("port"))
+        if not 1024 <= port <= 65535 or port == PORT or port in ports:
+            raise ValueError(f"puerto inválido o duplicado en catálogo: {port}")
+        ports.add(port)
+        config = str(model.get("config", ""))
+        if not config.startswith("configs/") or Path(config).name != config[8:] or not config.endswith(".json"):
+            raise ValueError(f"configuración fuera de configs: {config}")
+    default = cat.get("default_model")
+    if default is not None and default not in ids:
+        raise ValueError("default_model no existe en el catálogo")
+    return cat
+
+
 def load_catalog() -> dict:
-    return json.loads(CATALOG.read_text(encoding="utf-8"))
+    return validate_catalog(json.loads(CATALOG.read_text(encoding="utf-8")))
 
 
 def save_catalog(cat: dict) -> None:
+    validate_catalog(cat)
     tmp = CATALOG.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(cat, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(CATALOG)
@@ -62,8 +90,24 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40]
 
 
+def validate_model_id(mid: str | None) -> str:
+    mid = str(mid or "").strip().lower()
+    if not MODEL_ID_RE.fullmatch(mid):
+        raise ValueError("id de modelo inválido: usa 1-64 caracteres [a-z0-9._-]")
+    return mid
+
+
+def safe_child(base: Path, relative: str) -> Path:
+    candidate = (base / str(relative)).resolve()
+    root = base.resolve()
+    if not candidate.is_relative_to(root):
+        raise ValueError("ruta fuera del directorio permitido")
+    return candidate
+
+
 def unit_name(entry: dict) -> str:
-    return entry.get("unit") or f"strata-console-{slug(entry['id'])}"
+    mid = validate_model_id(entry["id"])
+    return entry.get("unit") or f"strata-console-{slug(mid)}"
 
 
 def http_json(url: str, method: str = "GET", body: bytes | None = None, timeout: int = 5):
@@ -82,27 +126,41 @@ def ready(port: int, mid: str) -> bool:
         return False
 
 
-def systemctl(action: str, unit: str) -> None:
-    subprocess.run(["systemctl", "--user", action, unit], check=False,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def systemctl(action: str, unit: str) -> bool:
+    result = subprocess.run(["systemctl", "--user", action, unit], check=False,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return result.returncode == 0
+
+
+def _systemd_quote(value: str) -> str:
+    value = str(value)
+    if any(ch in value for ch in ('"', "\n", "\r", "\\")):
+        raise ValueError("ruta incompatible con systemd")
+    return f'"{value}"' if any(ch.isspace() for ch in value) else value
 
 
 def ensure_unit(entry: dict, cat: dict) -> str:
-    """Crea el unit systemd del modelo si falta. Nunca toca los units ya existentes."""
+    """Create a native systemd unit without invoking a shell."""
     unit = unit_name(entry)
     path = Path.home() / ".config" / "systemd" / "user" / f"{unit}.service"
     if path.exists():
         return unit
-    cfg = json.loads((BASE / entry["config"]).read_text(encoding="utf-8"))
-    root = cat["engine_root"]
+    cfg_path = safe_child(CONFIGS, Path(entry["config"]).name)
+    root = Path(cat["engine_root"]).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"engine_root no existe: {root}")
+    python_bin = root / ".venv" / "bin" / "python"
+    if not python_bin.is_file():
+        python_bin = Path("/usr/bin/python3")
+    port = int(entry["port"])
     body = f"""[Unit]
-Description=Strata Console {entry['id']}
+Description=Strata Console {validate_model_id(entry['id'])}
 
 [Service]
 Type=simple
-WorkingDirectory={root}
+WorkingDirectory={_systemd_quote(str(root))}
 Environment=STRATA_MAX_OUTPUT_TOKENS=4096
-ExecStart=/bin/bash -lc 'cd "{root}" && exec .venv/bin/python serve/server.py --engine strata --config "{BASE / entry["config"]}" --port {entry["port"]}'
+ExecStart={_systemd_quote(str(python_bin))} {_systemd_quote(str(root / 'serve' / 'server.py'))} --engine strata --config {_systemd_quote(str(cfg_path))} --port {port}
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=0
@@ -113,6 +171,7 @@ WantedBy=default.target
 """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
+    path.chmod(0o600)
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
     return unit
 
@@ -133,7 +192,8 @@ def switch_to(mid: str, cat: dict) -> int:
                 if other.get("legacy_unit"):
                     systemctl("stop", other["legacy_unit"])
         unit = ensure_unit(entry, cat)
-        subprocess.run(["systemctl", "--user", "restart", unit], check=True, timeout=60)
+        if not systemctl("restart", unit):
+            raise RuntimeError(f"systemd no pudo reiniciar {unit}")
         deadline = time.monotonic() + START_TIMEOUT
         while time.monotonic() < deadline:
             if ready(port, mid):

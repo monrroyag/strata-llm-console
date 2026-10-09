@@ -1,7 +1,7 @@
 [Unit]
 Description=Strata Console Telegram Control Bot
-After=hermes-strata-console.service
-Requires=hermes-strata-console.service
+After=strata-llm-console.service
+Requires=strata-llm-console.service
 
 [Service]
 Type=simple
@@ -13,7 +13,7 @@ RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=%h/.hermes/strata-console/data
+ReadWritePaths=%h/.local/share/strata-llm-console/data %h/.local/share/strata-llm-console/logs
 
 [Install]
 WantedBy=default.target

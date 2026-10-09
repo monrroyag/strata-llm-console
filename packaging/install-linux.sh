@@ -4,6 +4,7 @@ set -euo pipefail
 OWNER_REPO="${STRATA_CONSOLE_REPO:-monrroyag/strata-llm-console}"
 VERSION="${1:-latest}"
 INSTALL_ROOT="${STRATA_CONSOLE_HOME:-$HOME/.local/share/strata-llm-console}"
+STATE_ROOT="${STRATA_CONSOLE_STATE:-$HOME/.local/state/strata-llm-console}"
 BIN_DIR="${STRATA_CONSOLE_BIN_DIR:-$HOME/.local/bin}"
 SERVICE_DIR="$HOME/.config/systemd/user"
 ARCHIVE_ARCH="linux-x86_64"
@@ -32,15 +33,41 @@ curl -fL --retry 3 --retry-all-errors -o "$TMP/$NAME.tar.gz.sha256" "$BASE/$NAME
   sha256sum -c "$NAME.tar.gz.sha256"
 )
 
-mkdir -p "$INSTALL_ROOT" "$BIN_DIR" "$SERVICE_DIR"
 tar -xzf "$TMP/$NAME.tar.gz" -C "$TMP"
-rm -rf "$INSTALL_ROOT.new"
-mv "$TMP/$NAME" "$INSTALL_ROOT.new"
+NEW_ROOT="$TMP/$NAME"
+mkdir -p "$STATE_ROOT" "$BIN_DIR" "$SERVICE_DIR"
+
+# Move runtime state out of the replaceable code directory exactly once.
 if [[ -d "$INSTALL_ROOT" ]]; then
+  for item in catalog.json configs data logs token; do
+    if [[ ! -e "$STATE_ROOT/$item" && ! -L "$STATE_ROOT/$item" && -e "$INSTALL_ROOT/$item" ]]; then
+      mv "$INSTALL_ROOT/$item" "$STATE_ROOT/$item"
+    fi
+  done
+fi
+for item in catalog.json configs data logs token; do
+  if [[ ! -e "$STATE_ROOT/$item" && ! -L "$STATE_ROOT/$item" && -e "$NEW_ROOT/$item" ]]; then
+    mv "$NEW_ROOT/$item" "$STATE_ROOT/$item"
+  fi
+done
+mkdir -p "$STATE_ROOT/data" "$STATE_ROOT/logs" "$STATE_ROOT/configs"
+if [[ ! -e "$STATE_ROOT/data/params_help.json" && -f "$NEW_ROOT/data/params_help.json" ]]; then
+  cp "$NEW_ROOT/data/params_help.json" "$STATE_ROOT/data/params_help.json"
+fi
+
+rm -rf "$INSTALL_ROOT.new"
+mv "$NEW_ROOT" "$INSTALL_ROOT.new"
+if [[ -e "$INSTALL_ROOT" || -L "$INSTALL_ROOT" ]]; then
+  rm -rf "$INSTALL_ROOT.previous"
   mv "$INSTALL_ROOT" "$INSTALL_ROOT.previous"
 fi
 mv "$INSTALL_ROOT.new" "$INSTALL_ROOT"
-rm -rf "$INSTALL_ROOT.previous"
+
+# The application keeps its existing paths, but they now point to durable state.
+for item in catalog.json configs data logs token; do
+  rm -rf "$INSTALL_ROOT/$item"
+  ln -s "$STATE_ROOT/$item" "$INSTALL_ROOT/$item"
+done
 
 cat > "$BIN_DIR/strata-llm-console" <<EOF
 #!/usr/bin/env bash
@@ -64,15 +91,29 @@ Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=$STATE_ROOT
 
 [Install]
 WantedBy=default.target
 EOF
 
 if command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload >/dev/null 2>&1; then
-  systemctl --user enable --now strata-llm-console.service
-  printf 'Installed and started: http://127.0.0.1:8090\n'
+  if systemctl --user enable --now strata-llm-console.service && curl -fsS --max-time 8 http://127.0.0.1:8090/health >/dev/null; then
+    rm -rf "$INSTALL_ROOT.previous"
+    printf 'Installed and started: http://127.0.0.1:8090\n'
+  else
+    echo 'Health check failed; restoring previous code release.' >&2
+    systemctl --user disable --now strata-llm-console.service >/dev/null 2>&1 || true
+    rm -rf "$INSTALL_ROOT"
+    if [[ -e "$INSTALL_ROOT.previous" || -L "$INSTALL_ROOT.previous" ]]; then
+      mv "$INSTALL_ROOT.previous" "$INSTALL_ROOT"
+      systemctl --user daemon-reload >/dev/null 2>&1 || true
+      systemctl --user enable --now strata-llm-console.service >/dev/null 2>&1 || true
+    fi
+    exit 1
+  fi
 else
   printf 'Installed at %s\nStart with: %s\n' "$INSTALL_ROOT" "$BIN_DIR/strata-llm-console"
 fi
-printf 'Command: %s\n' "$BIN_DIR/strata-llm-console"
+printf 'Runtime state: %s\nCommand: %s\n' "$STATE_ROOT" "$BIN_DIR/strata-llm-console"

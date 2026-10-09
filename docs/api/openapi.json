@@ -1,0 +1,54 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Strata LLM Console API",
+    "version": "0.2.0",
+    "description": "Authenticated control plane and OpenAI-compatible gateway for local Strata inference."
+  },
+  "servers": [{"url": "http://127.0.0.1:8090"}],
+  "tags": [
+    {"name": "Health"},
+    {"name": "OpenAI gateway"},
+    {"name": "Control plane"},
+    {"name": "Observability"}
+  ],
+  "components": {
+    "securitySchemes": {
+      "ConsoleToken": {"type": "apiKey", "in": "header", "name": "X-Strata-Token"},
+      "BearerToken": {"type": "http", "scheme": "bearer"}
+    },
+    "responses": {
+      "Unauthorized": {"description": "Authentication required", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+      "BadRequest": {"description": "Invalid request", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+      "NotFound": {"description": "Resource not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+    },
+    "schemas": {
+      "Error": {"type": "object", "required": ["error"], "properties": {"error": {"type": "object", "required": ["message"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}}}}},
+      "ModelRef": {"type": "object", "required": ["model"], "properties": {"model": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"}}},
+      "ChatCompletion": {"type": "object", "required": ["model", "messages"], "properties": {"model": {"type": "string"}, "messages": {"type": "array", "items": {"type": "object"}}, "stream": {"type": "boolean"}, "max_tokens": {"type": "integer", "minimum": 1}, "temperature": {"type": "number", "minimum": 0, "maximum": 2}}}
+    }
+  },
+  "paths": {
+    "/health": {"get": {"tags": ["Health"], "security": [], "responses": {"200": {"description": "Minimal liveness response"}}}},
+    "/v1/models": {"get": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "responses": {"200": {"description": "Available models"}, "401": {"$ref": "#/components/responses/Unauthorized"}}}},
+    "/v1/chat/completions": {"post": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChatCompletion"}}}}, "responses": {"200": {"description": "Completion or SSE stream"}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}}}},
+    "/v1/responses": {"post": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "responses": {"200": {"description": "Responses-compatible forwarding"}}}},
+    "/v1/messages": {"post": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "responses": {"200": {"description": "Messages-compatible forwarding"}}}},
+    "/v1/embeddings": {"post": {"tags": ["OpenAI gateway"], "security": [{"BearerToken": []}], "responses": {"200": {"description": "Embeddings-compatible forwarding"}}}},
+    "/api/evaluations": {"post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"202": {"description": "Measured evaluation job created"}}}},
+    "/api/evaluations/{evaluation_id}": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Evaluation progress/results"}}}},
+    "/api/evaluations/{evaluation_id}/apply": {"post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Measured candidate applied"}}}},
+    "/api/jobs": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Durable job list"}}}},
+    "/api/jobs/{job_id}": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "parameters": [{"name": "job_id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Job status"}, "404": {"$ref": "#/components/responses/NotFound"}}}},
+    "/api/jobs/{job_id}/cancel": {"post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Cancellation requested"}}}},
+    "/api/status": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Models and hardware status"}}}},
+    "/api/params-help": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Versioned parameter schema"}}}},
+    "/api/optimize": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "parameters": [{"name": "context", "in": "query", "schema": {"type": "integer", "minimum": 4096, "maximum": 262144}}, {"name": "profile", "in": "query", "schema": {"type": "string", "enum": ["balanced", "speed", "long", "code"]}}, {"name": "model", "in": "query", "schema": {"type": "string"}}], "responses": {"200": {"description": "Evidence-backed recommendation"}, "400": {"$ref": "#/components/responses/BadRequest"}}}},
+    "/api/traces": {"get": {"tags": ["Observability"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Bounded request trace summaries"}}}},
+    "/api/traces/{trace_id}": {"get": {"tags": ["Observability"], "security": [{"ConsoleToken": []}], "parameters": [{"name": "trace_id", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Trace detail"}, "404": {"$ref": "#/components/responses/NotFound"}}}},
+    "/api/connection": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Connection status"}}}, "post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Connection change prepared"}}}},
+    "/api/backends": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Runtime capability discovery"}}}},
+    "/api/update-status": {"get": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Read-only engine version check"}}}},
+    "/api/update": {"post": {"tags": ["Control plane"], "security": [{"ConsoleToken": []}], "responses": {"200": {"description": "Explicit engine update result"}}}}
+  }
+}

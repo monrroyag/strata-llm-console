@@ -3,6 +3,8 @@
 .git/
 .github/
 docs/screenshots/
-data/
+data/*
+!data/
+!data/params_help.json
 logs/
 packaging/
