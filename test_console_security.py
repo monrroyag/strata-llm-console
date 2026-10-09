@@ -36,6 +36,7 @@ class ConsoleSecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result = update_core.check_update({"engine_root": str(Path(tmp) / "missing")})
         self.assertFalse(result["present"])
+        self.assertTrue(result["install_required"])
         self.assertIn("no instalado", result["error"])
 
     def test_runtime_state_migrates_and_commits_atomically(self):

@@ -207,9 +207,13 @@ def optimize(chat_id):
 
 def update(chat_id):
     d = local("/api/update-status")
+    changes = d.get("changes") or []
+    detail = "\n".join(f"• {safe(x.get('commit'))} {safe(x.get('date'))} — {safe(x.get('subject'))}" for x in changes[:5])
+    if d.get("changelog_url"):
+        detail += f"\n<a href=\"{safe(d.get('changelog_url'))}\">Changelog</a>"
     send(chat_id, (f"<b>{tx(chat_id, 'update')}</b>\nLocal: <code>{safe(d.get('local_commit'))}</code>\n"
                    f"Remoto: <code>{safe(d.get('remote_commit'))}</code>\nAtrás: {safe(d.get('behind'))}\n"
-                   f"Actualización: {safe(d.get('update_available'))}"), [[("⬆️ Aplicar actualización", "askupdate")], [("↩️ Menú", "menu")]])
+                   f"Actualización: {safe(d.get('update_available'))}\n{detail}"), [[("⬆️ Aplicar actualización", "askupdate")], [("↩️ Menú", "menu")]])
 
 
 def callback(chat_id, data, callback_id):

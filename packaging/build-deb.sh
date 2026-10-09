@@ -32,7 +32,7 @@ Version: $VERSION
 Section: net
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.10), ca-certificates
+Depends: python3 (>= 3.10), ca-certificates, git
 Maintainer: monrroyag <monrroyag@users.noreply.github.com>
 Description: Strata LLM Console control plane
  Local control plane and OpenAI-compatible gateway for the Strata inference engine.
@@ -99,6 +99,19 @@ for item in catalog.json configs data logs token; do
   rm -rf "$APP/$item"
   ln -s "$STATE/$item" "$APP/$item"
 done
+if command -v git >/dev/null 2>&1; then
+  if ! PYTHONPATH="$APP" /usr/bin/python3 - <<'PY'
+from console_core import load_catalog
+from update_core import ensure_engine
+result = ensure_engine(load_catalog())
+print("Strata checkout:", result.get("root"))
+if result.get("model_setup_required"):
+    print("Strata source installed; model setup remains explicit to avoid an unsolicited large model download.")
+PY
+  then
+    echo "Warning: Strata could not be installed automatically; use the Update panel after network access is available." >&2
+  fi
+fi
 chown -R "$USER_NAME:$GROUP_NAME" "$STATE" "$LOG"
 chmod 0750 "$STATE" "$STATE/data" "$STATE/configs" "$STATE/logs" "$LOG"
 [ -e "$STATE/catalog.json" ] && chmod 0600 "$STATE/catalog.json" || true

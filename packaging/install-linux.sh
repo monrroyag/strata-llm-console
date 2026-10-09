@@ -14,6 +14,7 @@ need curl
 need tar
 need sha256sum
 need python3
+need git
 
 if [[ "$VERSION" == "latest" ]]; then
   VERSION=$(curl -fsSL "https://api.github.com/repos/$OWNER_REPO/releases/latest" \
@@ -68,6 +69,17 @@ for item in catalog.json configs data logs token; do
   rm -rf "$INSTALL_ROOT/$item"
   ln -s "$STATE_ROOT/$item" "$INSTALL_ROOT/$item"
 done
+if ! PYTHONPATH="$INSTALL_ROOT" python3 - <<'PY'
+from console_core import load_catalog
+from update_core import ensure_engine
+result = ensure_engine(load_catalog())
+print("Strata checkout:", result.get("root"))
+if result.get("model_setup_required"):
+    print("Strata source installed; run the explicit Strata setup/model selection before starting inference.")
+PY
+then
+  echo 'Warning: Strata could not be installed automatically; use the Update panel after network access is available.' >&2
+fi
 
 cat > "$BIN_DIR/strata-llm-console" <<EOF
 #!/usr/bin/env bash

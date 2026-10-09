@@ -59,7 +59,7 @@ The installer verifies SHA-256, installs under `~/.local/share/strata-llm-consol
 For Debian/Ubuntu with systemd, the same release also provides a native package:
 
 ```bash
-VERSION=v0.2.4
+VERSION=v0.2.5
 curl -fL -o /tmp/strata-llm-console.deb \
   "https://github.com/monrroyag/strata-llm-console/releases/download/${VERSION}/strata-llm-console-${VERSION#v}_all.deb"
 sudo apt install /tmp/strata-llm-console.deb

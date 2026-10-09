@@ -18,6 +18,11 @@ OFFICIAL_REPO = "https://github.com/Niko1221/Strata.git"
 ENGINE_INSTALL = BASE / "data" / "engine" / "Strata"
 
 
+def _engine_root(cat: dict) -> Path:
+    raw = Path(str(cat.get("engine_root", ""))).expanduser()
+    return (BASE / raw).resolve() if not raw.is_absolute() else raw.resolve()
+
+
 def _save_catalog(cat: dict) -> None:
     state_store.put("catalog", cat)
     state_store.atomic_json_export(CATALOG, cat, mode=0o600)
@@ -32,21 +37,32 @@ def validate_repo_url(repo: str) -> str:
 
 
 def ensure_engine(cat: dict) -> dict:
-    """Instala el engine oficial solo si falta; conserva la ruta si ya existe."""
-    root = Path(cat.get("engine_root", "")).expanduser()
-    if root.exists() and (root / ".git").exists():
-        return {"present": True, "installed": False, "root": str(root)}
-    repo = cat.get("update", {}).get("repo_url") or "https://github.com/Niko1221/Strata.git"
-    ENGINE_INSTALL.parent.mkdir(parents=True, exist_ok=True)
-    if ENGINE_INSTALL.exists() and not (ENGINE_INSTALL / ".git").exists():
-        raise RuntimeError(f"ruta de instalación ocupada y no es un repo git: {ENGINE_INSTALL}")
-    if not ENGINE_INSTALL.exists():
-        subprocess.run(["git", "clone", "--origin", "origin", repo, str(ENGINE_INSTALL)], check=True,
+    """Detect the official checkout and clone it only when no valid checkout exists."""
+    root = _engine_root(cat)
+    if root.is_dir() and (root / ".git").exists():
+        normalized = str(root)
+        if cat.get("engine_root") != normalized:
+            cat["engine_root"] = normalized
+            cat.setdefault("update", {})["repo_url"] = validate_repo_url(cat.get("update", {}).get("repo_url") or OFFICIAL_REPO)
+            _save_catalog(cat)
+        return {"present": True, "installed": False, "root": normalized,
+                "setup_script": (root / "setup.sh").is_file(),
+                "runtime_ready": (root / ".venv" / "bin" / "python").is_file()}
+    repo = validate_repo_url(cat.get("update", {}).get("repo_url") or OFFICIAL_REPO)
+    target = ENGINE_INSTALL
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists() and not (target / ".git").exists():
+        raise RuntimeError(f"ruta de instalación ocupada y no es un repo git: {target}")
+    if not target.exists():
+        subprocess.run(["git", "clone", "--origin", "origin", repo, str(target)], check=True,
                        capture_output=True, text=True, timeout=600)
-    cat["engine_root"] = str(ENGINE_INSTALL)
+    cat["engine_root"] = str(target.resolve())
     cat.setdefault("update", {})["repo_url"] = repo
     _save_catalog(cat)
-    return {"present": True, "installed": True, "root": str(ENGINE_INSTALL), "repo_url": repo}
+    return {"present": True, "installed": True, "root": str(target.resolve()),
+            "repo_url": repo, "setup_script": (target / "setup.sh").is_file(),
+            "runtime_ready": (target / ".venv" / "bin" / "python").is_file(),
+            "model_setup_required": not (target / ".venv" / "bin" / "python").is_file()}
 
 
 def _git(root: str, *args: str, timeout: int = 120) -> str:
@@ -73,16 +89,19 @@ def engine_version(root: str) -> str | None:
 
 def check_update(cat: dict, fetch: bool = True) -> dict:
     """Read-only version check; installation is an explicit update operation."""
-    root_path = Path(cat.get("engine_root", "")).expanduser()
+    root_path = _engine_root(cat)
     if not root_path.is_dir() or not (root_path / ".git").exists():
         return {"present": False, "installed": False, "update_available": False,
-                "error": "engine no instalado; usa la acción de instalación explícita",
+                "install_required": True, "repo_url": OFFICIAL_REPO,
+                "error": "engine no instalado; se puede instalar desde el repositorio oficial",
                 "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     root = str(root_path)
-    info = {"repo_url": cat.get("update", {}).get("repo_url") or
-            _git(root, "config", "--get", "remote.origin.url"),
+    info = {"repo_url": validate_repo_url(cat.get("update", {}).get("repo_url") or
+                                              _git(root, "config", "--get", "remote.origin.url")),
             "branch": "main", "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "installed": False}
+            "installed": True, "local_version": engine_version(root),
+            "setup_script": (root_path / "setup.sh").is_file(),
+            "runtime_ready": (root_path / ".venv" / "bin" / "python").is_file()}
     try:
         if fetch:
             _git(root, "fetch", "origin", "--quiet", timeout=180)
@@ -91,7 +110,13 @@ def check_update(cat: dict, fetch: bool = True) -> dict:
         behind, ahead = _git(root, "rev-list", "--left-right", "--count", "HEAD...origin/main").split()
         info["behind"], info["ahead"] = int(behind), int(ahead)
         info["update_available"] = info["behind"] > 0
-        info["new_commits"] = [_git(root, "log", "--oneline", f"HEAD..origin/main", "-n", "1")]
+        info["new_commits"] = _git(root, "log", "--oneline", "HEAD..origin/main", "-n", "20").splitlines()
+        info["changes"] = []
+        for row in _git(root, "log", "--format=%h%x09%ad%x09%s", "--date=short", "HEAD..origin/main", "-n", "20").splitlines():
+            parts = row.split("\t", 2)
+            if len(parts) == 3:
+                info["changes"].append({"commit": parts[0], "date": parts[1], "subject": parts[2]})
+        info["changelog_url"] = f"https://github.com/Niko1221/Strata/compare/{info['local_commit']}...{info['remote_commit']}"
         info["remote_version"] = None
         try:
             raw = subprocess.run(["git", "-C", root, "show", "origin/main:VERSION"],
