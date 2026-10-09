@@ -18,8 +18,8 @@ mkdir -p "$DEBIAN" "$APP/data" "$APP/docs" "$APP/configs" "$APP/schemas" "$APP/w
   "$PKGROOT/lib/systemd/system" "$PKGROOT/usr/bin"
 cd "$ROOT"
 cp backend_core.py connection_core.py console_core.py console_server.py history_core.py job_core.py evaluation_core.py \
-   optimize_core.py state_store.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py \
-   catalog.json .gitignore README.md telegram-control.env.example telegram-control.service.example "$APP/"
+   optimize_core.py state_store.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py update_monitor.py \
+   catalog.json .gitignore README.md VERSION telegram-control.env.example telegram-control.service.example "$APP/"
 cp -r configs/. "$APP/configs/"
 cp -r schemas/. "$APP/schemas/"
 cp -r web/. "$APP/web/"

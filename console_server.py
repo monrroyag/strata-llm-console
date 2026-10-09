@@ -19,6 +19,7 @@ from console_core import (BASE, CATALOG, CONFIGS, HOST, LOGS, PORT, TOKEN_FILE,
 import history_core
 import tunnel_core
 import update_core
+import update_monitor
 import optimize_core
 import trace_core
 import connection_core
@@ -93,6 +94,7 @@ def sampler_loop():
 
 
 threading.Thread(target=sampler_loop, daemon=True).start()
+update_monitor.start()
 
 
 def authorized(handler: BaseHTTPRequestHandler) -> bool:
@@ -493,6 +495,11 @@ class Handler(BaseHTTPRequestHandler):
             info = update_core.check_update(cat, fetch=(first_query(self.path, "fresh", "0") == "1"))
             info["engine_version"] = update_core.engine_version(cat.get("engine_root", ""))
             self.send_json(200, info)
+            return
+        if p == "/api/update-notifications":
+            if not self.remote_guard():
+                return
+            self.send_json(200, update_monitor.status())
             return
         if p == "/api/backends":
             if not authorized(self):

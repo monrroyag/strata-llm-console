@@ -56,6 +56,7 @@ code{background:var(--srf3);border:1px solid var(--ln);border-radius:2px;padding
 .gv{font-size:11px;color:var(--tx2);min-width:78px;text-align:right}
 .pill{font-size:10.5px;color:var(--tx2);border:1px solid var(--ln);border-radius:11px;
   padding:2px 9px;white-space:nowrap}
+.update-badge{background:var(--srf2);font:inherit;cursor:pointer;color:var(--run);border-color:#c9913a66}.update-badge:hover{border-color:var(--run);color:var(--tx)}
 #tok{width:112px;font-size:11px}
 
 /* ---------- barra de seleccion ---------- */

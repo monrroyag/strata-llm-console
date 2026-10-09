@@ -12,8 +12,8 @@ trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/$NAME" "$OUT"
 cd "$ROOT"
 cp backend_core.py connection_core.py console_core.py console_server.py history_core.py job_core.py evaluation_core.py \
-   optimize_core.py state_store.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py \
-   catalog.json .gitignore README.md telegram-control.env.example \
+   optimize_core.py state_store.py telegram_control_bot.py trace_core.py tunnel_core.py update_core.py update_monitor.py \
+   catalog.json .gitignore README.md VERSION telegram-control.env.example \
    telegram-control.service.example "$STAGE/$NAME/"
 cp -r configs web "$STAGE/$NAME/"
 cp -r schemas "$STAGE/$NAME/"

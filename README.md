@@ -196,6 +196,16 @@ Control-plane metadata is stored transactionally in `data/state.sqlite3` using S
 
 The state database and compatibility files are local runtime artifacts, ignored by Git, protected with mode `0600`, and never contain model weights or API secrets. Jobs continue using their bounded SQLite queue; traces and performance history remain bounded append-only stores with clipped fields.
 
+## Update monitoring
+
+The console checks every 10 minutes, in the background, for:
+
+- new commits in the official Strata engine repository;
+- a newer Strata LLM Console release;
+- the latest commit subject, date, version and comparison/changelog URL.
+
+A visible header badge and the **System → Update** panel report pending engine or console updates. Telegram receives the same commit details. Updates are never applied silently: the operator reviews the changes and explicitly starts the engine or console update action.
+
 ## Runtime layout
 
 - `catalog.json` — sanitized catalog template.
